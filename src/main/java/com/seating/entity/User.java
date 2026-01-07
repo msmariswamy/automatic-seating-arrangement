@@ -25,8 +25,10 @@ public class User extends BaseEntity {
     private String password;
 
     @Column(nullable = false, length = 20)
+    @Builder.Default
     private String role = "ADMIN";
 
     @Column(nullable = false)
+    @Builder.Default
     private Boolean active = true;
 }

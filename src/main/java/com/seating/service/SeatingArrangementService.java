@@ -76,6 +76,12 @@ public class SeatingArrangementService {
         }
     }
 
+    /**
+     * CONTINUOUS SERIES ALLOCATION STRATEGY
+     * - ALL R-positions get the SAME subject (continuous series)
+     * - ALL L-positions get the SAME subject (different from R, continuous series)
+     * - ALL M-positions get the SAME subject (continuation of either R or L)
+     */
     private List<SeatingArrangement> allocateSeats(List<Student> students, List<Room> rooms,
                                                    SeatingFilterDTO filter) {
         List<SeatingArrangement> arrangements = new ArrayList<>();
@@ -91,63 +97,185 @@ public class SeatingArrangementService {
             return arrangements;
         }
 
-        Map<Integer, List<Seat>> seatsByBench = groupSeatsByBench(allSeats);
-        Map<String, Queue<Student>> studentsBySubject = groupStudentsBySubject(students, filter.getSubjects());
+        // Group seats by position and sort them
+        Map<String, List<Seat>> seatsByPosition = groupSeatsByPosition(allSeats);
 
-        for (Map.Entry<Integer, List<Seat>> benchEntry : seatsByBench.entrySet()) {
-            List<Seat> benchSeats = benchEntry.getValue();
+        // Group students by subject
+        Map<String, List<Student>> studentsBySubject = groupStudentsBySubjectList(students, filter.getSubjects());
 
-            if (benchSeats.size() < 3) {
-                continue;
+        if (studentsBySubject.isEmpty()) {
+            log.error("No students found for the selected subjects");
+            return arrangements;
+        }
+
+        // Select subjects for each position series
+        String rSubject = selectSubjectForPosition(studentsBySubject, null, null);
+        if (rSubject == null) {
+            log.error("No subject available for R-series");
+            return arrangements;
+        }
+
+        String lSubject = selectSubjectForPosition(studentsBySubject, rSubject, null);
+        if (lSubject == null) {
+            log.error("No subject available for L-series");
+            return arrangements;
+        }
+
+        // Allocate R-series (ALL R positions get same subject)
+        List<Seat> rSeats = seatsByPosition.getOrDefault("R", new ArrayList<>());
+        List<Student> rStudents = studentsBySubject.get(rSubject);
+        arrangements.addAll(allocatePositionSeries(rSeats, rStudents, rSubject, filter));
+
+        // Allocate L-series (ALL L positions get same subject)
+        List<Seat> lSeats = seatsByPosition.getOrDefault("L", new ArrayList<>());
+        List<Student> lStudents = studentsBySubject.get(lSubject);
+        arrangements.addAll(allocatePositionSeries(lSeats, lStudents, lSubject, filter));
+
+        // Determine M-series subject (continuation of either R or L)
+        String mSubject;
+        List<Student> mStudents;
+
+        int rRemaining = countUnallocatedStudents(rStudents);
+        int lRemaining = countUnallocatedStudents(lStudents);
+
+        if (rRemaining > lRemaining) {
+            mSubject = rSubject;
+            mStudents = rStudents;
+            log.info("M-series continues R-series subject: {}", mSubject);
+        } else {
+            mSubject = lSubject;
+            mStudents = lStudents;
+            log.info("M-series continues L-series subject: {}", mSubject);
+        }
+
+        // Allocate M-series (ALL M positions get same subject)
+        List<Seat> mSeats = seatsByPosition.getOrDefault("M", new ArrayList<>());
+        arrangements.addAll(allocatePositionSeries(mSeats, mStudents, mSubject, filter));
+
+        log.info("Seating allocation complete: R-series={}, L-series={}, M-series={}", rSubject, lSubject, mSubject);
+        return arrangements;
+    }
+
+    /**
+     * Group seats by position (R, M, L) and sort them by room and bench number
+     */
+    private Map<String, List<Seat>> groupSeatsByPosition(List<Seat> seats) {
+        Map<String, List<Seat>> seatsByPosition = new HashMap<>();
+        seatsByPosition.put("R", new ArrayList<>());
+        seatsByPosition.put("M", new ArrayList<>());
+        seatsByPosition.put("L", new ArrayList<>());
+
+        for (Seat seat : seats) {
+            String position = seat.getPosition();
+            if (seatsByPosition.containsKey(position)) {
+                seatsByPosition.get(position).add(seat);
             }
+        }
 
-            Seat rightSeat = benchSeats.stream().filter(s -> "R".equals(s.getPosition())).findFirst().orElse(null);
-            Seat middleSeat = benchSeats.stream().filter(s -> "M".equals(s.getPosition())).findFirst().orElse(null);
-            Seat leftSeat = benchSeats.stream().filter(s -> "L".equals(s.getPosition())).findFirst().orElse(null);
+        // Sort each position's seats by room ID and bench number
+        Comparator<Seat> seatComparator = Comparator
+                .comparing((Seat s) -> s.getRoom().getId())
+                .thenComparing(Seat::getBenchNo);
 
-            Set<String> usedSubjects = new HashSet<>();
+        seatsByPosition.values().forEach(list -> list.sort(seatComparator));
 
-            if (rightSeat != null) {
-                Student student = findStudentWithDifferentSubject(studentsBySubject, usedSubjects);
-                if (student != null) {
-                    String subject = getStudentSubject(student, filter.getSubjects());
-                    if (subject != null) {
-                        arrangements.add(createArrangement(student, rightSeat, subject, filter));
-                        usedSubjects.add(subject);
-                        rightSeat.setIsOccupied(true);
-                        student.setIsAllocated(true);
-                    }
-                }
-            }
+        return seatsByPosition;
+    }
 
-            if (middleSeat != null) {
-                Student student = findStudentWithDifferentSubject(studentsBySubject, usedSubjects);
-                if (student != null) {
-                    String subject = getStudentSubject(student, filter.getSubjects());
-                    if (subject != null) {
-                        arrangements.add(createArrangement(student, middleSeat, subject, filter));
-                        usedSubjects.add(subject);
-                        middleSeat.setIsOccupied(true);
-                        student.setIsAllocated(true);
-                    }
-                }
-            }
+    /**
+     * Group students by subject into lists (not queues)
+     */
+    private Map<String, List<Student>> groupStudentsBySubjectList(List<Student> students, Set<String> filterSubjects) {
+        Map<String, List<Student>> studentsBySubject = new HashMap<>();
 
-            if (leftSeat != null) {
-                Student student = findStudentWithDifferentSubject(studentsBySubject, usedSubjects);
-                if (student != null) {
-                    String subject = getStudentSubject(student, filter.getSubjects());
-                    if (subject != null) {
-                        arrangements.add(createArrangement(student, leftSeat, subject, filter));
-                        usedSubjects.add(subject);
-                        leftSeat.setIsOccupied(true);
-                        student.setIsAllocated(true);
-                    }
+        for (Student student : students) {
+            for (String subject : student.getSubjects()) {
+                if (filterSubjects.contains(subject)) {
+                    studentsBySubject.computeIfAbsent(subject, k -> new ArrayList<>()).add(student);
+                    break; // Each student counts for only one subject
                 }
             }
         }
 
+        return studentsBySubject;
+    }
+
+    /**
+     * Select the best subject for a position based on student count
+     * Excludes already selected subjects
+     */
+    private String selectSubjectForPosition(Map<String, List<Student>> studentsBySubject,
+                                           String excludeSubject1,
+                                           String excludeSubject2) {
+        String selectedSubject = null;
+        int maxCount = 0;
+
+        for (Map.Entry<String, List<Student>> entry : studentsBySubject.entrySet()) {
+            String subject = entry.getKey();
+
+            if (subject.equals(excludeSubject1) || subject.equals(excludeSubject2)) {
+                continue;
+            }
+
+            int unallocatedCount = countUnallocatedStudents(entry.getValue());
+
+            if (unallocatedCount > maxCount) {
+                maxCount = unallocatedCount;
+                selectedSubject = subject;
+            }
+        }
+
+        return selectedSubject;
+    }
+
+    /**
+     * Allocate students from a subject to all seats in a position series
+     */
+    private List<SeatingArrangement> allocatePositionSeries(List<Seat> seats,
+                                                            List<Student> students,
+                                                            String subject,
+                                                            SeatingFilterDTO filter) {
+        List<SeatingArrangement> arrangements = new ArrayList<>();
+
+        int studentIndex = 0;
+        for (Seat seat : seats) {
+            // Find next unallocated student
+            while (studentIndex < students.size() && students.get(studentIndex).getIsAllocated()) {
+                studentIndex++;
+            }
+
+            if (studentIndex >= students.size()) {
+                log.warn("Not enough students in subject {} to fill all {} seats", subject, seat.getPosition());
+                break;
+            }
+
+            Student student = students.get(studentIndex);
+
+            // Create arrangement
+            SeatingArrangement arrangement = createArrangement(student, seat, subject, filter);
+            arrangements.add(arrangement);
+
+            // Mark as allocated
+            student.setIsAllocated(true);
+            seat.setIsOccupied(true);
+
+            studentIndex++;
+        }
+
+        log.info("Allocated {} students to {}-series (subject: {})", arrangements.size(),
+                 seats.isEmpty() ? "?" : seats.get(0).getPosition(), subject);
+
         return arrangements;
+    }
+
+    /**
+     * Count unallocated students in a list
+     */
+    private int countUnallocatedStudents(List<Student> students) {
+        if (students == null) {
+            return 0;
+        }
+        return (int) students.stream().filter(s -> !s.getIsAllocated()).count();
     }
 
     private Map<Integer, List<Seat>> groupSeatsByBench(List<Seat> seats) {
@@ -174,6 +302,56 @@ public class SeatingArrangementService {
         }
 
         return studentsBySubject;
+    }
+
+    /**
+     * Find a student with better spacing - avoids subjects used on same bench
+     * and subjects recently used in the same position
+     */
+    private Student findStudentWithSpacing(Map<String, Queue<Student>> studentsBySubject,
+                                          Set<String> usedSubjects,
+                                          List<String> recentSubjects) {
+        // Phase 1: Try to find student whose subject is NOT on this bench AND NOT recently used in this position
+        for (Map.Entry<String, Queue<Student>> entry : studentsBySubject.entrySet()) {
+            String subject = entry.getKey();
+            Queue<Student> queue = entry.getValue();
+
+            if (!usedSubjects.contains(subject) && !recentSubjects.contains(subject)) {
+                for (Student student : queue) {
+                    if (!student.getIsAllocated()) {
+                        queue.remove(student);
+                        return student;
+                    }
+                }
+            }
+        }
+
+        // Phase 2: Try to find student whose subject is at least NOT on this bench (ignore recent subjects)
+        for (Map.Entry<String, Queue<Student>> entry : studentsBySubject.entrySet()) {
+            String subject = entry.getKey();
+            Queue<Student> queue = entry.getValue();
+
+            if (!usedSubjects.contains(subject)) {
+                while (!queue.isEmpty()) {
+                    Student student = queue.poll();
+                    if (!student.getIsAllocated()) {
+                        return student;
+                    }
+                }
+            }
+        }
+
+        // Phase 3: Fallback - return any available student
+        for (Queue<Student> queue : studentsBySubject.values()) {
+            while (!queue.isEmpty()) {
+                Student student = queue.poll();
+                if (!student.getIsAllocated()) {
+                    return student;
+                }
+            }
+        }
+
+        return null;
     }
 
     private Student findStudentWithDifferentSubject(Map<String, Queue<Student>> studentsBySubject,

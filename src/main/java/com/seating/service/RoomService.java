@@ -5,6 +5,7 @@ import com.seating.entity.Room;
 import com.seating.entity.Seat;
 import com.seating.repository.RoomRepository;
 import com.seating.repository.SeatRepository;
+import com.seating.repository.SeatingArrangementRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class RoomService {
 
     private final RoomRepository roomRepository;
     private final SeatRepository seatRepository;
+    private final SeatingArrangementRepository seatingArrangementRepository;
     private final ExcelService excelService;
 
     @Transactional(readOnly = true)
@@ -137,7 +139,18 @@ public class RoomService {
 
     @Transactional
     public void deleteAllRooms() {
-        roomRepository.deleteAllRooms();
+        // Delete in order to respect foreign key constraints:
+        // 1. seating_arrangements (references seats and rooms)
+        // 2. seats (references rooms)
+        // 3. rooms (no dependencies)
+
+        seatingArrangementRepository.deleteAll();
+        log.info("All seating arrangements have been deleted");
+
+        seatRepository.deleteAll();
+        log.info("All seats have been deleted");
+
+        roomRepository.deleteAll();
         log.info("All rooms have been deleted");
     }
 
