@@ -101,6 +101,36 @@ This bench-by-bench approach ensures:
 - Subjects are consumed in continuous blocks per position
 - Same-bench constraint is always enforced (R, M, L on same bench allocated together)
 
+#### Algorithm Details
+
+**Subject Selection & Ordering:**
+- Subjects are ordered by student count (descending) before allocation
+- Subject with most students is allocated first to R positions
+- Second-most students allocated to M positions
+- Third-most students allocated to L positions
+
+**Allocation Process:**
+1. All seats are grouped by bench (using Room ID + Bench Number as key)
+2. Benches are sorted in order (Room 1 Bench 1, Room 1 Bench 2, etc.)
+3. For each bench:
+   - Allocate R position from current R subject (if students available, else switch to next subject)
+   - Allocate M position from current M subject (if students available, else switch to next subject)
+   - Allocate L position from current L subject (if students available, else switch to next subject)
+4. Each position independently tracks and switches subjects when exhausted
+
+**Subject Switching Logic:**
+- When a position's current subject is exhausted, it searches for the next available subject
+- Searches through all subjects in order (starting from current index + 1)
+- Skips subjects that have no remaining unallocated students
+- If all subjects exhausted, that position stops allocation
+
+**Edge Cases:**
+- **Single Subject**: All positions (R, M, L) use the same subject (constraint cannot be enforced)
+- **Two Subjects**: R and L use different subjects, M uses whichever has more students
+- **Three+ Subjects**: Full offset strategy applies (R=Sub1, M=Sub2, L=Sub3, etc.)
+- **Unequal Student Counts**: Positions with exhausted subjects continue with next available subject
+- **Insufficient Seats**: Students without allocated seats are tracked and logged
+
 ### Entity Relationships
 
 ```
@@ -235,3 +265,64 @@ This means only one arrangement can be "active" at a time, but historical arrang
 - Ensure filter criteria (departments, classes, subjects) match actual student data
 - Check that rooms have available seats (not all occupied)
 - Review application logs for detailed error messages (logging level is DEBUG for com.seating package)
+
+### Verifying Correct Allocation
+
+**Expected Output:**
+- Each position (R, M, L) should show continuous blocks of the same subject
+- On any single bench, R, M, and L should have different subjects (unless only 1 subject selected)
+- All selected subjects should appear in the final allocation
+- Application logs show subject switching messages when blocks change
+
+**Sample Log Output:**
+```
+Students found per subject:
+  Commerce-VI -> 45 students
+  India in World Politics -> 38 students
+  History of Marathas -> 32 students
+  Advanced Macroeconomics -> 28 students
+
+Starting allocation - R: Commerce-VI, M: India in World Politics, L: History of Marathas
+R-position: Subject Commerce-VI exhausted, switching to next
+R-position: Switched to subject Advanced Macroeconomics
+M-position: Subject India in World Politics exhausted, switching to next
+M-position: Switched to subject Advanced Macroeconomics
+
+Seating allocation complete: 143 students allocated
+Subject distribution: {Commerce-VI=45, India in World Politics=38, History of Marathas=32, Advanced Macroeconomics=28}
+```
+
+**Red Flags:**
+- Same subject appearing on R, M, L of the same bench (indicates constraint violation)
+- Selected subjects not appearing in final allocation (indicates algorithm issue)
+- Large number of unallocated students when seats are available (indicates logic error)
+
+## Recent Changes
+
+### January 2026 - Algorithm & Build Updates
+
+**Seating Allocation Algorithm Rewrite:**
+- **Fixed**: Changed from position-by-position allocation to bench-by-bench allocation
+  - **Old behavior**: Allocated ALL R seats first, then ALL M seats, then ALL L seats
+  - **Issue**: Same-bench constraint (R≠M≠L) could not be properly enforced
+  - **New behavior**: Allocates R, M, L together for each bench before moving to next bench
+  - **Result**: Proper enforcement of same-bench constraint with block distribution
+
+- **Fixed**: Subject rotation vs block distribution
+  - **Old behavior**: Rotated through subjects (R1→Sub1, R2→Sub2, R3→Sub3, R4→Sub1...)
+  - **Issue**: Subjects mixed within same position, no continuous blocks
+  - **New behavior**: Block distribution where each position maintains one subject until exhausted
+  - **Result**: All selected subjects are utilized, continuous subject blocks per position
+
+**Build Configuration Updates:**
+- Upgraded Java from 17 to 21 (build.gradle, gradle.properties)
+- Upgraded Gradle from 8.4 to 8.11.1 (gradle-wrapper.properties)
+- Upgraded Lombok from default to 1.18.34 for Java 21 compatibility
+- Added gradle.properties with JAVA_HOME configuration for Java 21
+
+**File Changes:**
+- `SeatingArrangementService.java` - Complete rewrite of allocateSeats() method (lines 79-260)
+- `build.gradle` - Java 21 and Lombok 1.18.34
+- `gradle/wrapper/gradle-wrapper.properties` - Gradle 8.11.1
+- `gradle.properties` - New file with JAVA_HOME setting
+- `CLAUDE.md` - Updated algorithm documentation, tech stack, troubleshooting
