@@ -185,12 +185,10 @@
                 <div class="filter-section">
                     <div class="row">
                         <div class="col-md-4 mb-3">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="mb-0">Select Departments</h6>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="selectAllDepartments">
-                                    <label class="form-check-label small" for="selectAllDepartments">Select All</label>
-                                </div>
+                            <h6>Select Departments</h6>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="selectAllDepartments">
+                                <label class="form-check-label fw-bold" for="selectAllDepartments">Select All</label>
                             </div>
                             <div id="departmentCheckboxes"></div>
                         </div>
@@ -200,6 +198,10 @@
                         </div>
                         <div class="col-md-4 mb-3">
                             <h6>Select Subjects</h6>
+                            <div class="mb-2">
+                                <input type="text" class="form-control form-control-sm" id="subjectSearch"
+                                       placeholder="Search subjects...">
+                            </div>
                             <div id="subjectCheckboxes"></div>
                         </div>
                     </div>
@@ -269,7 +271,7 @@
             $.get('/api/students/subjects', function(data) {
                 let html = '';
                 data.forEach(subj => {
-                    html += `<div class="form-check">
+                    html += `<div class="form-check subject-item">
                         <input class="form-check-input" type="checkbox" value="${subj}" id="subj_${subj}">
                         <label class="form-check-label" for="subj_${subj}">${subj}</label>
                     </div>`;
