@@ -80,30 +80,96 @@ The `SeatingArrangementService` implements a **room-by-room 2-subject-per-bench 
 
 **Pattern:** Each bench has exactly **2 subjects total**, with M duplicating either R or L's subject.
 
-**Example with 2 subjects** (Commerce-VI has 50 students, History has 40 students):
-```
-Room 1:
-  Bench 1: R1=Commerce-VI,  M1=Commerce-VI,  L1=History    (M matches R)
-  Bench 2: R2=Commerce-VI,  M2=Commerce-VI,  L2=History    (M matches R)
-  Bench 3: R3=Commerce-VI,  M3=History,      L3=History    (M matches L)
-  ...
-  (When Commerce-VI exhausted in R)
-  Bench 10: R10=(no more), M10=History,     L10=History   (M matches L)
+**Example with 2 subjects** (Commerce-VI has 50 students, India in World Politics has 40 students):
 
-Room 2:
-  Bench 1: R1=(next subject), M1=History,   L1=History
+**Room 11 (ID=1) - Allocation Order:**
+```
+Phase 1: Allocate ALL R seats
+  R1  = AF23001  (Commerce-VI)
+  R2  = BA23132  (Commerce-VI)
+  R3  = BC20013  (Commerce-VI)
+  R4  = BC20017  (Commerce-VI)
+  ...
+  R11 = BC21408  (Commerce-VI)
+
+Phase 2: Allocate ALL M seats
+  M1  = (no seat in Room 11)
+  M2  = (no seat in Room 11)
+  ... (Room 11 has no M seats)
+
+Phase 3: Allocate ALL L seats
+  L1  = BA21131  (India in World Politics)
+  L2  = BA22110  (India in World Politics)
+  L3  = BA23007  (India in World Politics)
+  ...
+  L11 = BA23038  (India in World Politics)
+```
+
+**Room 101 (ID=2) - Subjects continue:**
+```
+Phase 1: Allocate ALL R seats (continues Commerce-VI)
+  R1  = BC21409  (Commerce-VI - next student after Room 11)
+  R2  = BC21410  (Commerce-VI)
+  ...
+
+Phase 2: Allocate ALL M seats (matches R or L)
+  M1  = BC21415  (Commerce-VI - matches R, more students available)
+  M2  = BC21416  (Commerce-VI)
+  ...
+
+Phase 3: Allocate ALL L seats (continues India in World Politics)
+  L1  = BA23039  (India in World Politics - next student after Room 11)
+  L2  = BA23040  (India in World Politics)
   ...
 ```
 
-**M Position Logic:**
-- M checks which subject (R or L) has more unallocated students
-- M allocates from that subject to maximize utilization
-- If one subject is exhausted, M automatically uses the other
+**Key Points:**
+- Room 11 completed fully (R→M→L) before Room 101 starts
+- Commerce-VI subject continues from Room 11 to Room 101 seamlessly
+- India in World Politics subject continues from Room 11 to Room 101 seamlessly
+- M seats match whichever (R or L) has more students available on each bench
+
+**Workflow Visualization:**
+```
+Start
+  ↓
+Initialize: R=Commerce-VI, L=India in World Politics
+  ↓
+┌─────────────────────────────────────────────┐
+│ ROOM 11 (ID=1)                              │
+│  Phase 1: R1, R2, R3... (Commerce-VI)       │
+│  Phase 2: (no M seats in Room 11)           │
+│  Phase 3: L1, L2, L3... (India in World P.) │
+└─────────────────────────────────────────────┘
+  ↓ (Subjects continue)
+┌─────────────────────────────────────────────┐
+│ ROOM 101 (ID=2)                             │
+│  Phase 1: R1, R2, R3... (Commerce-VI cont.) │
+│  Phase 2: M1, M2, M3... (matches R or L)    │
+│  Phase 3: L1, L2, L3... (India in World P.) │
+└─────────────────────────────────────────────┘
+  ↓ (Subjects continue)
+┌─────────────────────────────────────────────┐
+│ ROOM 105 (ID=3)                             │
+│  Phase 1: R1, R2, R3... (Commerce-VI cont.) │
+│  Phase 2: M1, M2, M3... (matches R or L)    │
+│  Phase 3: L1, L2, L3... (India in World P.) │
+└─────────────────────────────────────────────┘
+  ↓ (Subjects continue)
+┌─────────────────────────────────────────────┐
+│ ROOM 106 (ID=4)                             │
+│  Phase 1: R1, R2, R3... (Commerce-VI cont.) │
+│  Phase 2: M1, M2, M3... (matches R or L)    │
+│  Phase 3: L1, L2, L3... (India in World P.) │
+└─────────────────────────────────────────────┘
+  ↓
+Complete
+```
 
 This strategy ensures:
 - **2 subjects per bench**: Exactly two different subjects on each bench (R≠L, M matches one)
-- **Sequential seat allocation**: Starts from R1/M1/L1 in each room
-- **Continuous subject blocks**: Each position maintains subject until exhausted
+- **Room completion**: Each room fully allocated (R→M→L) before moving to next room
+- **Continuous subject blocks**: R and L subjects maintained across room boundaries
 - **Maximum utilization**: M fills gaps by matching whichever subject has more students
 
 #### Algorithm Details
