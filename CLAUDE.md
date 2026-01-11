@@ -69,14 +69,20 @@ Database settings are in `src/main/resources/application.properties`:
 
 ### Core Seating Algorithm
 
-The `SeatingArrangementService` implements a **room-by-room 2-subject-per-bench strategy**:
+The `SeatingArrangementService` implements a **room-by-room position-by-position 2-subject-per-bench strategy**:
+
+**Quick Summary:**
+- **Allocation Order**: Room 11 (R→M→L) → Room 101 (R→M→L) → Room 105 (R→M→L) → Room 106 (R→M→L)
+- **Each Room**: Phase 1: All R seats → Phase 2: All M seats → Phase 3: All L seats
+- **Constraint**: R≠L (different subjects), M=R OR M=L (matches one of them)
+- **Continuity**: R and L subjects continue seamlessly from room to room
 
 **Key Rules:**
 1. **R and L must have DIFFERENT subjects** (R ≠ L on each bench)
 2. **M must match EITHER R or L** (M = R's subject OR M = L's subject)
-3. **Sequential processing**: Process rooms in order (Room 1, Room 2, ...), then benches in order (Bench 1, Bench 2, ...)
-4. **Complete one room** before moving to the next
-5. **Subject sequence continues** from one room to the next (maintains subject blocks across rooms)
+3. **Sequential processing**: Rooms in ID order, seats in bench order (R1, R2, R3... then M1, M2, M3... then L1, L2, L3...)
+4. **Complete one room** before moving to the next (all R, M, L in Room 11 done before Room 101 starts)
+5. **Subject sequence continues** from one room to the next (R and L subjects maintain across room boundaries)
 
 **Pattern:** Each bench has exactly **2 subjects total**, with M duplicating either R or L's subject.
 
