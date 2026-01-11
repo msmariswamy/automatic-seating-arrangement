@@ -77,11 +77,12 @@ public class SeatingArrangementService {
     }
 
     /**
-     * CONTINUOUS SERIES ALLOCATION STRATEGY WITH SUBJECT ROTATION
-     * - ALL R positions (R1, R2, R3...) rotate through subjects continuously
-     * - ALL M positions (M1, M2, M3...) rotate through subjects with offset
-     * - ALL L positions (L1, L2, L3...) rotate through subjects with offset
-     * - Ensures no two students with same subject on same bench via offsets
+     * BLOCK DISTRIBUTION ALLOCATION STRATEGY
+     * - Each position (R, M, L) is divided into blocks by subject
+     * - New block starts only when previous subject is exhausted
+     * - All selected subjects are distributed across positions
+     * - Ensures no two students with same subject on same bench (R≠M≠L for each bench)
+     * - Uses offset strategy: if R starts with Sub1, M starts with Sub2, L starts with Sub3
      */
     private List<SeatingArrangement> allocateSeats(List<Student> students, List<Room> rooms,
                                                    SeatingFilterDTO filter) {
@@ -123,33 +124,28 @@ public class SeatingArrangementService {
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());
 
-        log.info("Starting allocation with {} subjects: {}", orderedSubjects.size(), orderedSubjects);
-
-        // Check for subjects with no students
-        for (String filterSubject : filter.getSubjects()) {
-            if (!studentsBySubject.containsKey(filterSubject)) {
-                log.warn("Subject '{}' has NO students (no student has this as their first matching subject)", filterSubject);
-            }
-        }
+        log.info("Subjects ordered by count: {}", orderedSubjects);
 
         int numSubjects = orderedSubjects.size();
 
-        // Allocate R-series (rotate through all subjects starting at index 0)
-        // R1->s1, R2->s2, R3->s3, R4->s4, R5->s1, R6->s2...
+        // Get seats for each position
         List<Seat> rSeats = seatsByPosition.getOrDefault("R", new ArrayList<>());
-        arrangements.addAll(allocatePositionSeriesRotating(rSeats, studentsBySubject, orderedSubjects, 0, filter));
-
-        // Allocate M-series (rotate through all subjects starting at index 1 to avoid R conflicts)
-        // M1->s2, M2->s3, M3->s4, M4->s1, M5->s2, M6->s3...
         List<Seat> mSeats = seatsByPosition.getOrDefault("M", new ArrayList<>());
-        int mOffset = numSubjects >= 2 ? 1 : 0;
-        arrangements.addAll(allocatePositionSeriesRotating(mSeats, studentsBySubject, orderedSubjects, mOffset, filter));
-
-        // Allocate L-series (rotate through all subjects starting at index 2 to avoid R and M conflicts)
-        // L1->s3, L2->s4, L3->s1, L4->s2, L5->s3, L6->s4...
         List<Seat> lSeats = seatsByPosition.getOrDefault("L", new ArrayList<>());
+
+        // Allocate R-series starting with subject at offset 0
+        log.info("Allocating R-series ({} seats)", rSeats.size());
+        arrangements.addAll(allocatePositionWithBlocks(rSeats, studentsBySubject, orderedSubjects, 0, filter));
+
+        // Allocate M-series starting with subject at offset 1 (to avoid R conflicts)
+        int mOffset = numSubjects >= 2 ? 1 : 0;
+        log.info("Allocating M-series ({} seats) with offset {}", mSeats.size(), mOffset);
+        arrangements.addAll(allocatePositionWithBlocks(mSeats, studentsBySubject, orderedSubjects, mOffset, filter));
+
+        // Allocate L-series starting with subject at offset 2 (to avoid R and M conflicts)
         int lOffset = numSubjects >= 3 ? 2 : (numSubjects >= 2 ? 1 : 0);
-        arrangements.addAll(allocatePositionSeriesRotating(lSeats, studentsBySubject, orderedSubjects, lOffset, filter));
+        log.info("Allocating L-series ({} seats) with offset {}", lSeats.size(), lOffset);
+        arrangements.addAll(allocatePositionWithBlocks(lSeats, studentsBySubject, orderedSubjects, lOffset, filter));
 
         // Log subject distribution
         Map<String, Long> subjectCounts = arrangements.stream()
@@ -168,13 +164,14 @@ public class SeatingArrangementService {
     }
 
     /**
-     * Allocate students to a position series (all R, all M, or all L) by rotating through subjects
+     * Allocate students to a position (R, M, or L) using block distribution
+     * Subjects are allocated in blocks - moves to next subject only when current subject is exhausted
      */
-    private List<SeatingArrangement> allocatePositionSeriesRotating(List<Seat> seats,
-                                                                     Map<String, List<Student>> studentsBySubject,
-                                                                     List<String> orderedSubjects,
-                                                                     int startOffset,
-                                                                     SeatingFilterDTO filter) {
+    private List<SeatingArrangement> allocatePositionWithBlocks(List<Seat> seats,
+                                                                 Map<String, List<Student>> studentsBySubject,
+                                                                 List<String> orderedSubjects,
+                                                                 int startOffset,
+                                                                 SeatingFilterDTO filter) {
         List<SeatingArrangement> arrangements = new ArrayList<>();
 
         if (seats.isEmpty() || orderedSubjects.isEmpty()) {
@@ -182,38 +179,49 @@ public class SeatingArrangementService {
         }
 
         int numSubjects = orderedSubjects.size();
-        int subjectIndex = startOffset % numSubjects;
+        int currentSubjectIndex = startOffset % numSubjects;
+        String currentSubject = orderedSubjects.get(currentSubjectIndex);
+
+        log.info("Starting {} position allocation with subject: {}",
+                 seats.isEmpty() ? "?" : seats.get(0).getPosition(), currentSubject);
 
         for (Seat seat : seats) {
-            Student selectedStudent = null;
-            String selectedSubject = null;
+            // Try to allocate from current subject
+            List<Student> subjectStudents = studentsBySubject.get(currentSubject);
+            Student student = findNextUnallocatedStudent(subjectStudents);
 
-            // Try to find a student from subjects in rotation order
-            for (int i = 0; i < numSubjects; i++) {
-                int currentIndex = (subjectIndex + i) % numSubjects;
-                String subject = orderedSubjects.get(currentIndex);
-                List<Student> subjectStudents = studentsBySubject.get(subject);
+            // If current subject exhausted, move to next subject in the ordered list
+            if (student == null) {
+                log.info("Subject {} exhausted, moving to next subject", currentSubject);
 
-                Student student = findNextUnallocatedStudent(subjectStudents);
-                if (student != null) {
-                    selectedStudent = student;
-                    selectedSubject = subject;
-                    subjectIndex = (currentIndex + 1) % numSubjects;
+                // Find next subject with available students
+                boolean foundNextSubject = false;
+                for (int i = 1; i <= numSubjects; i++) {
+                    currentSubjectIndex = (startOffset + i) % numSubjects;
+                    currentSubject = orderedSubjects.get(currentSubjectIndex);
+                    subjectStudents = studentsBySubject.get(currentSubject);
+                    student = findNextUnallocatedStudent(subjectStudents);
+
+                    if (student != null) {
+                        log.info("Switched to subject: {}", currentSubject);
+                        foundNextSubject = true;
+                        startOffset = currentSubjectIndex; // Update offset for next iteration
+                        break;
+                    }
+                }
+
+                if (!foundNextSubject) {
+                    log.warn("No more students available for {} position", seat.getPosition());
                     break;
                 }
             }
 
-            if (selectedStudent == null) {
-                log.warn("Not enough students to fill all {} seats", seat.getPosition());
-                break;
-            }
-
             // Create arrangement
-            SeatingArrangement arrangement = createArrangement(selectedStudent, seat, selectedSubject, filter);
+            SeatingArrangement arrangement = createArrangement(student, seat, currentSubject, filter);
             arrangements.add(arrangement);
 
             // Mark as allocated
-            selectedStudent.setIsAllocated(true);
+            student.setIsAllocated(true);
             seat.setIsOccupied(true);
         }
 
@@ -222,6 +230,7 @@ public class SeatingArrangementService {
 
         return arrangements;
     }
+
 
     /**
      * Group seats by position (R, M, L) and sort them by room and bench number
