@@ -69,27 +69,37 @@ Database settings are in `src/main/resources/application.properties`:
 
 ### Core Seating Algorithm
 
-The `SeatingArrangementService` implements a **block distribution allocation strategy**:
+The `SeatingArrangementService` implements a **bench-by-bench block distribution strategy**:
 
-1. **Position-based allocation**: Seats are grouped by position (R=Right, M=Middle, L=Left)
+1. **Bench-by-bench allocation**: Allocates all three positions (R, M, L) on each bench together before moving to the next bench
 2. **Block distribution with subject exhaustion**:
-   - Each position (R, M, L) is allocated in continuous blocks by subject
-   - New subject block starts only when the previous subject is exhausted (all students allocated)
-   - All selected subjects are distributed across positions to ensure complete utilization
+   - Each position (R, M, L) maintains its own current subject
+   - Position switches to next subject only when current subject is exhausted (all students allocated)
+   - All selected subjects are distributed to ensure complete utilization
 3. **Offset strategy for bench constraint**:
    - R positions start with Subject 1
    - M positions start with Subject 2 (offset by 1)
    - L positions start with Subject 3 (offset by 2)
-   - This ensures different subjects on each bench position
+   - Each position independently switches subjects when exhausted
 
 **Key constraint**: No two students with the same subject on the same bench (R≠M≠L for each bench).
 
-**Example**: If 5 subjects are selected:
-- R-series: Sub1 (until exhausted) → Sub2 (until exhausted) → Sub3...
-- M-series: Sub2 (until exhausted) → Sub3 (until exhausted) → Sub4...
-- L-series: Sub3 (until exhausted) → Sub4 (until exhausted) → Sub5...
+**Example with 5 subjects** (Commerce-VI, India in World Politics, History, Economics, Law):
+```
+Bench 1: R1=Commerce-VI,  M1=India in World Politics, L1=History
+Bench 2: R2=Commerce-VI,  M2=India in World Politics, L2=History
+Bench 3: R3=Commerce-VI,  M3=India in World Politics, L3=History
+...
+(When Commerce-VI exhausted in R)
+Bench X: RX=Economics,    MX=India in World Politics, LX=History
+(When India in World Politics exhausted in M)
+Bench Y: RY=Economics,    MY=Law,                     LY=History
+```
 
-This approach ensures all selected subjects are used in the allocation, unlike strategies that only use 2-3 subjects.
+This bench-by-bench approach ensures:
+- All selected subjects are utilized
+- Subjects are consumed in continuous blocks per position
+- Same-bench constraint is always enforced (R, M, L on same bench allocated together)
 
 ### Entity Relationships
 
