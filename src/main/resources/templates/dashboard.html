@@ -435,6 +435,21 @@
                 $('#selectAllDepartments').prop('indeterminate', true);
             }
         }
+
+        // Handle subject search functionality
+        $('#subjectSearch').on('keyup', function() {
+            let searchText = $(this).val().toLowerCase();
+
+            $('.subject-item').each(function() {
+                let subjectText = $(this).find('label').text().toLowerCase();
+
+                if (subjectText.includes(searchText)) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+        });
     </script>
 </body>
 </html>
