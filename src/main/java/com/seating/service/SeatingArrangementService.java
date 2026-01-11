@@ -152,6 +152,9 @@ public class SeatingArrangementService {
             Seat mSeat = benchSeats.stream().filter(s -> "M".equals(s.getPosition())).findFirst().orElse(null);
             Seat lSeat = benchSeats.stream().filter(s -> "L".equals(s.getPosition())).findFirst().orElse(null);
 
+            // Track subjects used on this bench to enforce constraint
+            Set<String> benchSubjects = new HashSet<>();
+
             // Allocate R position
             if (rSeat != null && !rSeat.getIsOccupied()) {
                 Student rStudent = findNextUnallocatedStudent(studentsBySubject.get(rCurrentSubject));
@@ -179,6 +182,7 @@ public class SeatingArrangementService {
                     arrangements.add(createArrangement(rStudent, rSeat, rCurrentSubject, filter));
                     rStudent.setIsAllocated(true);
                     rSeat.setIsOccupied(true);
+                    benchSubjects.add(rCurrentSubject); // Track subject used on this bench
                 }
             }
 
@@ -186,22 +190,35 @@ public class SeatingArrangementService {
             if (mSeat != null && !mSeat.getIsOccupied()) {
                 Student mStudent = findNextUnallocatedStudent(studentsBySubject.get(mCurrentSubject));
 
-                // If current subject exhausted, move to next subject
-                if (mStudent == null) {
-                    log.info("M-position: Subject {} exhausted, switching to next", mCurrentSubject);
+                // If current subject exhausted OR conflicts with R on same bench, move to next subject
+                if (mStudent == null || benchSubjects.contains(mCurrentSubject)) {
+                    if (benchSubjects.contains(mCurrentSubject)) {
+                        log.info("M-position: Subject {} conflicts with R on bench {}, switching to next", mCurrentSubject, benchKey);
+                    } else {
+                        log.info("M-position: Subject {} exhausted, switching to next", mCurrentSubject);
+                    }
                     boolean found = false;
+                    int startIndex = mSubjectIndex;
                     for (int i = 1; i <= numSubjects; i++) {
-                        mSubjectIndex = (mSubjectIndex + i) % numSubjects;
-                        mCurrentSubject = orderedSubjects.get(mSubjectIndex);
-                        mStudent = findNextUnallocatedStudent(studentsBySubject.get(mCurrentSubject));
+                        int testIndex = (startIndex + i) % numSubjects;
+                        String testSubject = orderedSubjects.get(testIndex);
+
+                        // Skip if subject conflicts with bench OR has no students
+                        if (benchSubjects.contains(testSubject)) {
+                            continue;
+                        }
+
+                        mStudent = findNextUnallocatedStudent(studentsBySubject.get(testSubject));
                         if (mStudent != null) {
+                            mSubjectIndex = testIndex;
+                            mCurrentSubject = testSubject;
                             log.info("M-position: Switched to subject {}", mCurrentSubject);
                             found = true;
                             break;
                         }
                     }
                     if (!found) {
-                        log.warn("No more students available for M position");
+                        log.warn("No more students available for M position (checked all subjects)");
                     }
                 }
 
@@ -209,6 +226,7 @@ public class SeatingArrangementService {
                     arrangements.add(createArrangement(mStudent, mSeat, mCurrentSubject, filter));
                     mStudent.setIsAllocated(true);
                     mSeat.setIsOccupied(true);
+                    benchSubjects.add(mCurrentSubject); // Track subject used on this bench
                 }
             }
 
@@ -216,22 +234,35 @@ public class SeatingArrangementService {
             if (lSeat != null && !lSeat.getIsOccupied()) {
                 Student lStudent = findNextUnallocatedStudent(studentsBySubject.get(lCurrentSubject));
 
-                // If current subject exhausted, move to next subject
-                if (lStudent == null) {
-                    log.info("L-position: Subject {} exhausted, switching to next", lCurrentSubject);
+                // If current subject exhausted OR conflicts with R/M on same bench, move to next subject
+                if (lStudent == null || benchSubjects.contains(lCurrentSubject)) {
+                    if (benchSubjects.contains(lCurrentSubject)) {
+                        log.info("L-position: Subject {} conflicts with R/M on bench {}, switching to next", lCurrentSubject, benchKey);
+                    } else {
+                        log.info("L-position: Subject {} exhausted, switching to next", lCurrentSubject);
+                    }
                     boolean found = false;
+                    int startIndex = lSubjectIndex;
                     for (int i = 1; i <= numSubjects; i++) {
-                        lSubjectIndex = (lSubjectIndex + i) % numSubjects;
-                        lCurrentSubject = orderedSubjects.get(lSubjectIndex);
-                        lStudent = findNextUnallocatedStudent(studentsBySubject.get(lCurrentSubject));
+                        int testIndex = (startIndex + i) % numSubjects;
+                        String testSubject = orderedSubjects.get(testIndex);
+
+                        // Skip if subject conflicts with bench OR has no students
+                        if (benchSubjects.contains(testSubject)) {
+                            continue;
+                        }
+
+                        lStudent = findNextUnallocatedStudent(studentsBySubject.get(testSubject));
                         if (lStudent != null) {
+                            lSubjectIndex = testIndex;
+                            lCurrentSubject = testSubject;
                             log.info("L-position: Switched to subject {}", lCurrentSubject);
                             found = true;
                             break;
                         }
                     }
                     if (!found) {
-                        log.warn("No more students available for L position");
+                        log.warn("No more students available for L position (checked all subjects)");
                     }
                 }
 
@@ -239,6 +270,7 @@ public class SeatingArrangementService {
                     arrangements.add(createArrangement(lStudent, lSeat, lCurrentSubject, filter));
                     lStudent.setIsAllocated(true);
                     lSeat.setIsOccupied(true);
+                    benchSubjects.add(lCurrentSubject); // Track subject used on this bench
                 }
             }
         }

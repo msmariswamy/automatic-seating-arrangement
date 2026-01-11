@@ -119,10 +119,13 @@ This bench-by-bench approach ensures:
 4. Each position independently tracks and switches subjects when exhausted
 
 **Subject Switching Logic:**
-- When a position's current subject is exhausted, it searches for the next available subject
+- When a position's current subject is exhausted OR conflicts with another position on the same bench, it switches subjects
+- **Critical**: M and L positions check `benchSubjects` set to avoid duplicating R's subject on the same bench
 - Searches through all subjects in order (starting from current index + 1)
-- Skips subjects that have no remaining unallocated students
-- If all subjects exhausted, that position stops allocation
+- Skips subjects that:
+  - Are already used on the current bench (enforces R≠M≠L)
+  - Have no remaining unallocated students
+- If all subjects exhausted or all conflict with bench, that position stops allocation
 
 **Edge Cases:**
 - **Single Subject**: All positions (R, M, L) use the same subject (constraint cannot be enforced)
@@ -313,6 +316,11 @@ Subject distribution: {Commerce-VI=45, India in World Politics=38, History of Ma
   - **Issue**: Subjects mixed within same position, no continuous blocks
   - **New behavior**: Block distribution where each position maintains one subject until exhausted
   - **Result**: All selected subjects are utilized, continuous subject blocks per position
+
+- **Fixed**: Constraint enforcement during subject switching
+  - **Issue**: When a position switched subjects (e.g., L exhausted Subject3), it could switch to a subject already used on the same bench (e.g., R's subject), violating R≠M≠L constraint
+  - **Solution**: Added `benchSubjects` tracking set - M and L positions check this set before switching to avoid conflicts
+  - **Result**: Same-bench constraint is now guaranteed - no two students on the same bench will ever have the same subject
 
 **Build Configuration Updates:**
 - Upgraded Java from 17 to 21 (build.gradle, gradle.properties)
