@@ -10,8 +10,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.HashMap;
 
 /**
  * Service for managing students
@@ -42,6 +44,19 @@ public class StudentService {
     @Transactional(readOnly = true)
     public List<String> getAllSubjects() {
         return studentRepository.findAllSubjects();
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, List<String>> getDepartmentSubjectMapping() {
+        List<String> departments = studentRepository.findAllDepartments();
+        Map<String, List<String>> mapping = new HashMap<>();
+
+        for (String department : departments) {
+            List<String> subjects = studentRepository.findSubjectsByDepartment(department);
+            mapping.put(department, subjects);
+        }
+
+        return mapping;
     }
 
     @Transactional(readOnly = true)

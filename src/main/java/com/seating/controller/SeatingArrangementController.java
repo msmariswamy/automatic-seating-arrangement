@@ -90,7 +90,8 @@ public class SeatingArrangementController {
     @ResponseBody
     public ResponseEntity<byte[]> downloadRoomPdf(
             @RequestParam String roomNo,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "10") String fontSize) {
         try {
             List<RoomReportDTO> reports = seatingService.getRoomReports(date);
             RoomReportDTO roomReport = reports.stream()
@@ -98,7 +99,7 @@ public class SeatingArrangementController {
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Room not found in reports"));
 
-            byte[] pdfData = pdfService.generateRoomReportPdf(roomReport, date);
+            byte[] pdfData = pdfService.generateRoomReportPdf(roomReport, date, fontSize);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_PDF);
@@ -108,6 +109,49 @@ public class SeatingArrangementController {
 
         } catch (Exception e) {
             log.error("Error generating PDF: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/consolidated/pdf")
+    @ResponseBody
+    public ResponseEntity<byte[]> downloadConsolidatedPdf(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "10") String fontSize) {
+        try {
+            List<ConsolidatedReportDTO> report = seatingService.getConsolidatedReport(date);
+            byte[] pdfData = pdfService.generateConsolidatedReportPdf(report, date, fontSize);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", "consolidated_report_" + date + ".pdf");
+
+            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Error generating consolidated PDF: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/all-rooms/pdf")
+    @ResponseBody
+    public ResponseEntity<byte[]> downloadAllRoomsPdf(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "10") String fontSize) {
+        try {
+            List<RoomReportDTO> reports = seatingService.getRoomReports(date);
+
+            byte[] pdfData = pdfService.generateMergedRoomReportsPdf(reports, date, fontSize);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", "all_rooms_report_" + date + ".pdf");
+
+            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Error generating merged PDF: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

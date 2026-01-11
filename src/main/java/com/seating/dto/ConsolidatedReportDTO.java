@@ -10,6 +10,7 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class ConsolidatedReportDTO {
+    private Long roomId;
     private String roomNo;
     private String department;
     private String seatFrom;

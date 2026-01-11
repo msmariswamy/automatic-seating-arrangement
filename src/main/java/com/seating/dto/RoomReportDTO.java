@@ -13,6 +13,7 @@ import java.util.Set;
 @AllArgsConstructor
 @Builder
 public class RoomReportDTO {
+    private Long roomId;
     private String roomNo;
     private Set<String> departments;
     private Set<String> subjects;

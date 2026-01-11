@@ -34,6 +34,9 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     @Query("SELECT DISTINCT sub FROM Student s JOIN s.subjects sub ORDER BY sub")
     List<String> findAllSubjects();
 
+    @Query("SELECT DISTINCT sub FROM Student s JOIN s.subjects sub WHERE s.department = :department ORDER BY sub")
+    List<String> findSubjectsByDepartment(@Param("department") String department);
+
     @Query("SELECT s FROM Student s WHERE s.department IN :departments " +
            "AND s.className IN :classes " +
            "AND EXISTS (SELECT 1 FROM s.subjects sub WHERE sub IN :subjects)")
