@@ -69,70 +69,84 @@ Database settings are in `src/main/resources/application.properties`:
 
 ### Core Seating Algorithm
 
-The `SeatingArrangementService` implements a **bench-by-bench block distribution strategy**:
+The `SeatingArrangementService` implements a **room-by-room 2-subject-per-bench strategy**:
 
-1. **Bench-by-bench allocation**: Allocates all three positions (R, M, L) on each bench together before moving to the next bench
-2. **Block distribution with subject exhaustion**:
-   - Each position (R, M, L) maintains its own current subject
-   - Position switches to next subject only when current subject is exhausted (all students allocated)
-   - All selected subjects are distributed to ensure complete utilization
-3. **Offset strategy for bench constraint**:
-   - R positions start with Subject 1
-   - M positions start with Subject 2 (offset by 1)
-   - L positions start with Subject 3 (offset by 2)
-   - Each position independently switches subjects when exhausted
+**Key Rules:**
+1. **R and L must have DIFFERENT subjects** (R ≠ L on each bench)
+2. **M must match EITHER R or L** (M = R's subject OR M = L's subject)
+3. **Sequential processing**: Process rooms in order (Room 1, Room 2, ...), then benches in order (Bench 1, Bench 2, ...)
+4. **Complete one room** before moving to the next
+5. **Subject sequence continues** from one room to the next (maintains subject blocks across rooms)
 
-**Key constraint**: No two students with the same subject on the same bench (R≠M≠L for each bench).
+**Pattern:** Each bench has exactly **2 subjects total**, with M duplicating either R or L's subject.
 
-**Example with 5 subjects** (Commerce-VI, India in World Politics, History, Economics, Law):
+**Example with 2 subjects** (Commerce-VI has 50 students, History has 40 students):
 ```
-Bench 1: R1=Commerce-VI,  M1=India in World Politics, L1=History
-Bench 2: R2=Commerce-VI,  M2=India in World Politics, L2=History
-Bench 3: R3=Commerce-VI,  M3=India in World Politics, L3=History
-...
-(When Commerce-VI exhausted in R)
-Bench X: RX=Economics,    MX=India in World Politics, LX=History
-(When India in World Politics exhausted in M)
-Bench Y: RY=Economics,    MY=Law,                     LY=History
+Room 1:
+  Bench 1: R1=Commerce-VI,  M1=Commerce-VI,  L1=History    (M matches R)
+  Bench 2: R2=Commerce-VI,  M2=Commerce-VI,  L2=History    (M matches R)
+  Bench 3: R3=Commerce-VI,  M3=History,      L3=History    (M matches L)
+  ...
+  (When Commerce-VI exhausted in R)
+  Bench 10: R10=(no more), M10=History,     L10=History   (M matches L)
+
+Room 2:
+  Bench 1: R1=(next subject), M1=History,   L1=History
+  ...
 ```
 
-This bench-by-bench approach ensures:
-- All selected subjects are utilized
-- Subjects are consumed in continuous blocks per position
-- Same-bench constraint is always enforced (R, M, L on same bench allocated together)
+**M Position Logic:**
+- M checks which subject (R or L) has more unallocated students
+- M allocates from that subject to maximize utilization
+- If one subject is exhausted, M automatically uses the other
+
+This strategy ensures:
+- **2 subjects per bench**: Exactly two different subjects on each bench (R≠L, M matches one)
+- **Sequential seat allocation**: Starts from R1/M1/L1 in each room
+- **Continuous subject blocks**: Each position maintains subject until exhausted
+- **Maximum utilization**: M fills gaps by matching whichever subject has more students
 
 #### Algorithm Details
 
 **Subject Selection & Ordering:**
 - Subjects are ordered by student count (descending) before allocation
-- Subject with most students is allocated first to R positions
-- Second-most students allocated to M positions
-- Third-most students allocated to L positions
+- Subject with most students is allocated to R positions
+- Subject with second-most students is allocated to L positions
+- M matches whichever (R or L) has more students available at each bench
 
 **Allocation Process:**
-1. All seats are grouped by bench (using Room ID + Bench Number as key)
-2. Benches are sorted in order (Room 1 Bench 1, Room 1 Bench 2, etc.)
-3. For each bench:
-   - Allocate R position from current R subject (if students available, else switch to next subject)
-   - Allocate M position from current M subject (if students available, else switch to next subject)
-   - Allocate L position from current L subject (if students available, else switch to next subject)
-4. Each position independently tracks and switches subjects when exhausted
+1. Rooms are sorted by room number (Room 1, Room 2, Room 3, ...)
+2. For each room in order:
+   - Get all seats for this room
+   - Group seats by bench number
+   - Sort benches in order (Bench 1, Bench 2, Bench 3, ...)
+3. For each bench in order:
+   - **Allocate R position** from current R subject (if students available, else switch to next subject ≠ L)
+   - **Allocate L position** from current L subject (if students available, else switch to next subject ≠ R)
+   - **Allocate M position** from whichever subject (R or L) has more unallocated students
+4. Subject sequence continues from one room to the next (R and L maintain their subject blocks across room boundaries)
 
 **Subject Switching Logic:**
-- When a position's current subject is exhausted OR conflicts with another position on the same bench, it switches subjects
-- **Critical**: M and L positions check `benchSubjects` set to avoid duplicating R's subject on the same bench
-- Searches through all subjects in order (starting from current index + 1)
-- Skips subjects that:
-  - Are already used on the current bench (enforces R≠M≠L)
-  - Have no remaining unallocated students
-- If all subjects exhausted or all conflict with bench, that position stops allocation
+- **R position switching:**
+  - When R's current subject is exhausted, search for next available subject
+  - Skip L's current subject to maintain R≠L constraint
+  - Continue to next subject in priority order
+- **L position switching:**
+  - When L's current subject is exhausted, search for next available subject
+  - Skip R's current subject to maintain R≠L constraint
+  - Continue to next subject in priority order
+- **M position logic:**
+  - M always matches EITHER R or L (never a third subject)
+  - Count unallocated students in R's subject vs L's subject
+  - M uses whichever has more students available
+  - If preferred subject exhausted, M automatically uses the alternate (R or L)
 
 **Edge Cases:**
-- **Single Subject**: All positions (R, M, L) use the same subject (constraint cannot be enforced)
-- **Two Subjects**: R and L use different subjects, M uses whichever has more students
-- **Three+ Subjects**: Full offset strategy applies (R=Sub1, M=Sub2, L=Sub3, etc.)
-- **Unequal Student Counts**: Positions with exhausted subjects continue with next available subject
-- **Insufficient Seats**: Students without allocated seats are tracked and logged
+- **Single Subject**: Error - requires at least 2 subjects for R≠L constraint
+- **Two Subjects**: Ideal case - R=Sub1, L=Sub2, M matches whichever has more students
+- **Three+ Subjects**: R uses Sub1 until exhausted then Sub3, L uses Sub2 until exhausted then Sub4, M matches R or L
+- **Unequal Student Counts**: M dynamically balances by matching the subject with more students on each bench
+- **Insufficient Seats**: Unallocated students are tracked and logged
 
 ### Entity Relationships
 
@@ -169,7 +183,9 @@ Seat (1) → (M) SeatingArrangement
 Thymeleaf templates in `src/main/resources/templates/`:
 - `login.html` - Authentication page
 - `dashboard.html` - Main interface for upload/generation
-- `reports.html` - Consolidated and individual room reports
+- `reports.html` - Consolidated and individual room reports with configurable settings
+  - Settings section with toggleable options (Show Subject column)
+  - Designed for future setting additions
 
 ## API Endpoints Reference
 
@@ -272,55 +288,84 @@ This means only one arrangement can be "active" at a time, but historical arrang
 ### Verifying Correct Allocation
 
 **Expected Output:**
-- Each position (R, M, L) should show continuous blocks of the same subject
-- On any single bench, R, M, and L should have different subjects (unless only 1 subject selected)
-- All selected subjects should appear in the final allocation
-- Application logs show subject switching messages when blocks change
+- Each bench should have exactly **2 subjects** (R≠L, M matches either R or L)
+- Seats should start from R1/M1/L1 in each room (sequential allocation)
+- Each position (R, L) should show continuous blocks of the same subject
+- M should alternate between R's subject and L's subject based on availability
+- Rooms should be processed in order (Room 1, then Room 2, then Room 3, ...)
 
 **Sample Log Output:**
 ```
 Students found per subject:
-  Commerce-VI -> 45 students
-  India in World Politics -> 38 students
-  History of Marathas -> 32 students
-  Advanced Macroeconomics -> 28 students
+  Commerce-VI -> 50 students
+  History -> 40 students
 
-Starting allocation - R: Commerce-VI, M: India in World Politics, L: History of Marathas
+Starting allocation - R: Commerce-VI, L: History, M: will match R or L
+Processing room: Room 1
+Processing room: Room 2
 R-position: Subject Commerce-VI exhausted, switching to next
-R-position: Switched to subject Advanced Macroeconomics
-M-position: Subject India in World Politics exhausted, switching to next
-M-position: Switched to subject Advanced Macroeconomics
+R-position: Switched to subject History
+L-position: Subject History exhausted, switching to next
 
-Seating allocation complete: 143 students allocated
-Subject distribution: {Commerce-VI=45, India in World Politics=38, History of Marathas=32, Advanced Macroeconomics=28}
+Seating allocation complete: 90 students allocated
+Subject distribution: {Commerce-VI=50, History=40}
 ```
 
 **Red Flags:**
-- Same subject appearing on R, M, L of the same bench (indicates constraint violation)
-- Selected subjects not appearing in final allocation (indicates algorithm issue)
-- Large number of unallocated students when seats are available (indicates logic error)
+- **R and L having the same subject on any bench** (violates R≠L constraint)
+- **M having a subject different from both R and L** (violates M=R or M=L rule)
+- **Seats starting at R9 instead of R1** (indicates sequencing issue)
+- **Large number of unallocated students when seats are available** (indicates logic error)
+
+**Correct Pattern Example:**
+```
+Room 24:
+  Bench 1: R1=Commerce-VI,  M1=Commerce-VI,  L1=History     ✓ (M matches R, R≠L)
+  Bench 2: R2=Commerce-VI,  M2=History,      L2=History     ✓ (M matches L, R≠L)
+  Bench 3: R3=Commerce-VI,  M3=Commerce-VI,  L3=History     ✓ (M matches R, R≠L)
+```
+
+**Incorrect Pattern Example:**
+```
+Room 24:
+  Bench 1: R9=Commerce-VI,  M1=Commerce-VI,  L1=(No seats)  ✗ (Should start at R1, L missing)
+```
 
 ## Recent Changes
 
-### January 2026 - Algorithm & Build Updates
+### January 2026 - Complete Algorithm Rewrite
 
-**Seating Allocation Algorithm Rewrite:**
-- **Fixed**: Changed from position-by-position allocation to bench-by-bench allocation
-  - **Old behavior**: Allocated ALL R seats first, then ALL M seats, then ALL L seats
-  - **Issue**: Same-bench constraint (R≠M≠L) could not be properly enforced
-  - **New behavior**: Allocates R, M, L together for each bench before moving to next bench
-  - **Result**: Proper enforcement of same-bench constraint with block distribution
+**Major Algorithm Changes - 2-Subject-Per-Bench Strategy:**
 
-- **Fixed**: Subject rotation vs block distribution
-  - **Old behavior**: Rotated through subjects (R1→Sub1, R2→Sub2, R3→Sub3, R4→Sub1...)
-  - **Issue**: Subjects mixed within same position, no continuous blocks
-  - **New behavior**: Block distribution where each position maintains one subject until exhausted
-  - **Result**: All selected subjects are utilized, continuous subject blocks per position
+- **COMPLETE REWRITE**: Changed to room-by-room 2-subject-per-bench allocation
+  - **Old behavior**: R, M, L all had different subjects (3 subjects per bench with offset strategy)
+  - **New requirement**: R≠L, M matches either R or L (2 subjects per bench)
+  - **New behavior**:
+    - R and L maintain different subjects (continuous blocks)
+    - M dynamically matches whichever (R or L) has more students available
+    - Rooms processed sequentially (Room 1, Room 2, ...)
+    - Benches processed in order within each room (Bench 1, Bench 2, ...)
+    - Subject sequence continues across room boundaries
+  - **Result**: Each bench has exactly 2 subjects, M fills gaps intelligently
 
-- **Fixed**: Constraint enforcement during subject switching
-  - **Issue**: When a position switched subjects (e.g., L exhausted Subject3), it could switch to a subject already used on the same bench (e.g., R's subject), violating R≠M≠L constraint
-  - **Solution**: Added `benchSubjects` tracking set - M and L positions check this set before switching to avoid conflicts
-  - **Result**: Same-bench constraint is now guaranteed - no two students on the same bench will ever have the same subject
+- **Fixed**: Sequential seat allocation
+  - **Old issue**: Seats starting at R9 instead of R1 (sequencing problem)
+  - **Solution**: Process rooms in order, then benches in order within each room
+  - **Result**: Seats now start from R1/M1/L1 in each room
+
+- **Fixed**: Subject constraint logic
+  - **Old constraint**: R≠M≠L (all different on same bench)
+  - **New constraint**: R≠L, M=R OR M=L (2 subjects per bench)
+  - **Implementation**:
+    - R and L check each other when switching subjects
+    - M counts available students in R vs L subjects and matches the higher
+    - If preferred subject exhausted, M automatically uses alternate
+  - **Result**: Proper 2-subject allocation with intelligent M balancing
+
+- **Eliminated**: 3-subject offset strategy
+  - **Old behavior**: R=Sub1, M=Sub2, L=Sub3 (offset by 1)
+  - **Why removed**: New requirement is 2 subjects per bench, not 3
+  - **New behavior**: R=Sub1, L=Sub2, M matches whichever has more students
 
 **Build Configuration Updates:**
 - Upgraded Java from 17 to 21 (build.gradle, gradle.properties)
@@ -328,8 +373,17 @@ Subject distribution: {Commerce-VI=45, India in World Politics=38, History of Ma
 - Upgraded Lombok from default to 1.18.34 for Java 21 compatibility
 - Added gradle.properties with JAVA_HOME configuration for Java 21
 
+**UI Enhancements:**
+- **Added**: Settings section on reports page (/reports.html)
+  - Checkbox to show/hide Subject column in room reports
+  - Positioned at top of page for easy access
+  - Designed with extensibility in mind for future settings (e.g., show/hide departments, font size, etc.)
+  - Uses CSS classes and jQuery for dynamic column toggling
+  - Subject column shown by default (checkbox checked)
+
 **File Changes:**
-- `SeatingArrangementService.java` - Complete rewrite of allocateSeats() method (lines 79-260)
+- `SeatingArrangementService.java` - Complete rewrite of allocateSeats() method (lines 79-276)
+- `reports.html` - Added Settings section with Show Subject checkbox
 - `build.gradle` - Java 21 and Lombok 1.18.34
 - `gradle/wrapper/gradle-wrapper.properties` - Gradle 8.11.1
 - `gradle.properties` - New file with JAVA_HOME setting

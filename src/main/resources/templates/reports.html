@@ -58,6 +58,12 @@
             background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
             border: none;
         }
+        .subject-column {
+            display: table-cell;
+        }
+        .subject-column.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -93,6 +99,21 @@
                             <option value="">Select a date...</option>
                         </select>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-cog"></i> Settings
+            </div>
+            <div class="card-body">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="showSubjectCheckbox" checked onchange="toggleSubjectColumn()">
+                    <label class="form-check-label" for="showSubjectCheckbox">
+                        Show Subject Column
+                    </label>
                 </div>
             </div>
         </div>
@@ -222,7 +243,7 @@
                                             <tr>
                                                 <th>Seat</th>
                                                 <th>Roll No</th>
-                                                <th>Subject</th>
+                                                <th class="subject-column">Subject</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -237,7 +258,7 @@
                                             <tr>
                                                 <th>Seat</th>
                                                 <th>Roll No</th>
-                                                <th>Subject</th>
+                                                <th class="subject-column">Subject</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -252,7 +273,7 @@
                                             <tr>
                                                 <th>Seat</th>
                                                 <th>Roll No</th>
-                                                <th>Subject</th>
+                                                <th class="subject-column">Subject</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -276,9 +297,20 @@
                 <tr>
                     <td>${seat.seatNo}</td>
                     <td>${seat.rollNo}</td>
-                    <td><small>${seat.subject}</small></td>
+                    <td class="subject-column"><small>${seat.subject}</small></td>
                 </tr>
             `).join('');
+        }
+
+        function toggleSubjectColumn() {
+            const showSubject = $('#showSubjectCheckbox').is(':checked');
+            const subjectColumns = $('.subject-column');
+
+            if (showSubject) {
+                subjectColumns.removeClass('hidden');
+            } else {
+                subjectColumns.addClass('hidden');
+            }
         }
 
         function downloadPdf(roomNo, date) {
