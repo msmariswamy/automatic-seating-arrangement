@@ -37,6 +37,7 @@ public class SeatingArrangementService {
 
             // Sort rooms by room ID (numeric order), this will make sure, how it was inserted, it will get by that order
             List<Room> rooms = roomRepository.findAll(Sort.by(Sort.Direction.ASC, "id"));
+            log.info("Initial Rooms List {}",rooms);
 
             if (rooms.isEmpty()) {
                 throw new IllegalArgumentException("No rooms available. Please add rooms first.");
