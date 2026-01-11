@@ -77,10 +77,11 @@ public class SeatingArrangementService {
     }
 
     /**
-     * CONTINUOUS SERIES ALLOCATION STRATEGY
-     * - ALL R-positions get the SAME subject (continuous series)
-     * - ALL L-positions get the SAME subject (different from R, continuous series)
-     * - ALL M-positions get the SAME subject (continuation of either R or L)
+     * CONTINUOUS SERIES ALLOCATION STRATEGY WITH SUBJECT ROTATION
+     * - ALL R positions (R1, R2, R3...) rotate through subjects continuously
+     * - ALL M positions (M1, M2, M3...) rotate through subjects with offset
+     * - ALL L positions (L1, L2, L3...) rotate through subjects with offset
+     * - Ensures no two students with same subject on same bench via offsets
      */
     private List<SeatingArrangement> allocateSeats(List<Student> students, List<Room> rooms,
                                                    SeatingFilterDTO filter) {
@@ -108,51 +109,117 @@ public class SeatingArrangementService {
             return arrangements;
         }
 
-        // Select subjects for each position series
-        String rSubject = selectSubjectForPosition(studentsBySubject, null, null);
-        if (rSubject == null) {
-            log.error("No subject available for R-series");
-            return arrangements;
+        // Log student counts per subject
+        log.info("Students found per subject:");
+        for (Map.Entry<String, List<Student>> entry : studentsBySubject.entrySet()) {
+            log.info("  {} -> {} students", entry.getKey(), entry.getValue().size());
         }
 
-        String lSubject = selectSubjectForPosition(studentsBySubject, rSubject, null);
-        if (lSubject == null) {
-            log.error("No subject available for L-series");
-            return arrangements;
+        // Get list of subjects ordered by student count (descending)
+        List<String> orderedSubjects = studentsBySubject.entrySet().stream()
+                .sorted((e1, e2) -> Integer.compare(
+                        countUnallocatedStudents(e2.getValue()),
+                        countUnallocatedStudents(e1.getValue())))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+
+        log.info("Starting allocation with {} subjects: {}", orderedSubjects.size(), orderedSubjects);
+
+        // Check for subjects with no students
+        for (String filterSubject : filter.getSubjects()) {
+            if (!studentsBySubject.containsKey(filterSubject)) {
+                log.warn("Subject '{}' has NO students (no student has this as their first matching subject)", filterSubject);
+            }
         }
 
-        // Allocate R-series (ALL R positions get same subject)
+        int numSubjects = orderedSubjects.size();
+
+        // Allocate R-series (rotate through all subjects starting at index 0)
+        // R1->s1, R2->s2, R3->s3, R4->s4, R5->s1, R6->s2...
         List<Seat> rSeats = seatsByPosition.getOrDefault("R", new ArrayList<>());
-        List<Student> rStudents = studentsBySubject.get(rSubject);
-        arrangements.addAll(allocatePositionSeries(rSeats, rStudents, rSubject, filter));
+        arrangements.addAll(allocatePositionSeriesRotating(rSeats, studentsBySubject, orderedSubjects, 0, filter));
 
-        // Allocate L-series (ALL L positions get same subject)
+        // Allocate M-series (rotate through all subjects starting at index 1 to avoid R conflicts)
+        // M1->s2, M2->s3, M3->s4, M4->s1, M5->s2, M6->s3...
+        List<Seat> mSeats = seatsByPosition.getOrDefault("M", new ArrayList<>());
+        int mOffset = numSubjects >= 2 ? 1 : 0;
+        arrangements.addAll(allocatePositionSeriesRotating(mSeats, studentsBySubject, orderedSubjects, mOffset, filter));
+
+        // Allocate L-series (rotate through all subjects starting at index 2 to avoid R and M conflicts)
+        // L1->s3, L2->s4, L3->s1, L4->s2, L5->s3, L6->s4...
         List<Seat> lSeats = seatsByPosition.getOrDefault("L", new ArrayList<>());
-        List<Student> lStudents = studentsBySubject.get(lSubject);
-        arrangements.addAll(allocatePositionSeries(lSeats, lStudents, lSubject, filter));
+        int lOffset = numSubjects >= 3 ? 2 : (numSubjects >= 2 ? 1 : 0);
+        arrangements.addAll(allocatePositionSeriesRotating(lSeats, studentsBySubject, orderedSubjects, lOffset, filter));
 
-        // Determine M-series subject (continuation of either R or L)
-        String mSubject;
-        List<Student> mStudents;
+        // Log subject distribution
+        Map<String, Long> subjectCounts = arrangements.stream()
+                .collect(Collectors.groupingBy(SeatingArrangement::getSubject, Collectors.counting()));
+        log.info("Seating allocation complete: {} students allocated", arrangements.size());
+        log.info("Subject distribution: {}", subjectCounts);
 
-        int rRemaining = countUnallocatedStudents(rStudents);
-        int lRemaining = countUnallocatedStudents(lStudents);
-
-        if (rRemaining > lRemaining) {
-            mSubject = rSubject;
-            mStudents = rStudents;
-            log.info("M-series continues R-series subject: {}", mSubject);
-        } else {
-            mSubject = lSubject;
-            mStudents = lStudents;
-            log.info("M-series continues L-series subject: {}", mSubject);
+        int totalUnallocated = students.stream()
+                .mapToInt(s -> s.getIsAllocated() ? 0 : 1)
+                .sum();
+        if (totalUnallocated > 0) {
+            log.warn("Warning: {} students were not allocated (insufficient seats or subject constraints)", totalUnallocated);
         }
 
-        // Allocate M-series (ALL M positions get same subject)
-        List<Seat> mSeats = seatsByPosition.getOrDefault("M", new ArrayList<>());
-        arrangements.addAll(allocatePositionSeries(mSeats, mStudents, mSubject, filter));
+        return arrangements;
+    }
 
-        log.info("Seating allocation complete: R-series={}, L-series={}, M-series={}", rSubject, lSubject, mSubject);
+    /**
+     * Allocate students to a position series (all R, all M, or all L) by rotating through subjects
+     */
+    private List<SeatingArrangement> allocatePositionSeriesRotating(List<Seat> seats,
+                                                                     Map<String, List<Student>> studentsBySubject,
+                                                                     List<String> orderedSubjects,
+                                                                     int startOffset,
+                                                                     SeatingFilterDTO filter) {
+        List<SeatingArrangement> arrangements = new ArrayList<>();
+
+        if (seats.isEmpty() || orderedSubjects.isEmpty()) {
+            return arrangements;
+        }
+
+        int numSubjects = orderedSubjects.size();
+        int subjectIndex = startOffset % numSubjects;
+
+        for (Seat seat : seats) {
+            Student selectedStudent = null;
+            String selectedSubject = null;
+
+            // Try to find a student from subjects in rotation order
+            for (int i = 0; i < numSubjects; i++) {
+                int currentIndex = (subjectIndex + i) % numSubjects;
+                String subject = orderedSubjects.get(currentIndex);
+                List<Student> subjectStudents = studentsBySubject.get(subject);
+
+                Student student = findNextUnallocatedStudent(subjectStudents);
+                if (student != null) {
+                    selectedStudent = student;
+                    selectedSubject = subject;
+                    subjectIndex = (currentIndex + 1) % numSubjects;
+                    break;
+                }
+            }
+
+            if (selectedStudent == null) {
+                log.warn("Not enough students to fill all {} seats", seat.getPosition());
+                break;
+            }
+
+            // Create arrangement
+            SeatingArrangement arrangement = createArrangement(selectedStudent, seat, selectedSubject, filter);
+            arrangements.add(arrangement);
+
+            // Mark as allocated
+            selectedStudent.setIsAllocated(true);
+            seat.setIsOccupied(true);
+        }
+
+        String position = seats.isEmpty() ? "?" : seats.get(0).getPosition();
+        log.info("Allocated {} students to {}-series", arrangements.size(), position);
+
         return arrangements;
     }
 
@@ -183,16 +250,18 @@ public class SeatingArrangementService {
     }
 
     /**
-     * Group students by subject into lists (not queues)
+     * Group students by subject into lists
+     * Each student is assigned to their matching subject from the filter
      */
     private Map<String, List<Student>> groupStudentsBySubjectList(List<Student> students, Set<String> filterSubjects) {
         Map<String, List<Student>> studentsBySubject = new HashMap<>();
 
         for (Student student : students) {
             for (String subject : student.getSubjects()) {
+                // Check if this subject is in the filter
                 if (filterSubjects.contains(subject)) {
                     studentsBySubject.computeIfAbsent(subject, k -> new ArrayList<>()).add(student);
-                    break; // Each student counts for only one subject
+                    break; // Each student is assigned to only one subject (first match)
                 }
             }
         }
@@ -276,6 +345,21 @@ public class SeatingArrangementService {
             return 0;
         }
         return (int) students.stream().filter(s -> !s.getIsAllocated()).count();
+    }
+
+    /**
+     * Find the next unallocated student from a list
+     */
+    private Student findNextUnallocatedStudent(List<Student> students) {
+        if (students == null) {
+            return null;
+        }
+        for (Student student : students) {
+            if (!student.getIsAllocated()) {
+                return student;
+            }
+        }
+        return null;
     }
 
     private Map<Integer, List<Seat>> groupSeatsByBench(List<Seat> seats) {
@@ -427,7 +511,7 @@ public class SeatingArrangementService {
                 String department = deptEntry.getKey();
                 List<SeatingArrangement> deptArrangements = deptEntry.getValue();
 
-                deptArrangements.sort(Comparator.comparing(a -> a.getSeat().getSeatNo()));
+                deptArrangements.sort(Comparator.comparing(a -> a.getSeat().getBenchNo()));
 
                 String seatFrom = deptArrangements.get(0).getSeat().getSeatNo();
                 String seatTo = deptArrangements.get(deptArrangements.size() - 1).getSeat().getSeatNo();
@@ -478,6 +562,7 @@ public class SeatingArrangementService {
             for (SeatingArrangement arr : roomArrangements) {
                 SeatAllocationDTO allocation = SeatAllocationDTO.builder()
                         .seatNo(arr.getSeat().getSeatNo())
+                        .benchNo(arr.getSeat().getBenchNo())
                         .rollNo(arr.getStudent().getRollNo())
                         .studentName(arr.getStudent().getName())
                         .department(arr.getStudent().getDepartment())
@@ -491,9 +576,9 @@ public class SeatingArrangementService {
                 }
             }
 
-            rightSeats.sort(Comparator.comparing(SeatAllocationDTO::getSeatNo));
-            middleSeats.sort(Comparator.comparing(SeatAllocationDTO::getSeatNo));
-            leftSeats.sort(Comparator.comparing(SeatAllocationDTO::getSeatNo));
+            rightSeats.sort(Comparator.comparing(SeatAllocationDTO::getBenchNo));
+            middleSeats.sort(Comparator.comparing(SeatAllocationDTO::getBenchNo));
+            leftSeats.sort(Comparator.comparing(SeatAllocationDTO::getBenchNo));
 
             RoomReportDTO report = RoomReportDTO.builder()
                     .roomNo(roomNo)

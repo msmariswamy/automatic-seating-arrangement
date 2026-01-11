@@ -222,6 +222,7 @@
                                             <tr>
                                                 <th>Seat</th>
                                                 <th>Roll No</th>
+                                                <th>Subject</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -236,6 +237,7 @@
                                             <tr>
                                                 <th>Seat</th>
                                                 <th>Roll No</th>
+                                                <th>Subject</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -250,6 +252,7 @@
                                             <tr>
                                                 <th>Seat</th>
                                                 <th>Roll No</th>
+                                                <th>Subject</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -267,12 +270,13 @@
 
         function generateSeatRows(seats) {
             if (!seats || seats.length === 0) {
-                return '<tr><td colspan="2">No seats</td></tr>';
+                return '<tr><td colspan="3">No seats</td></tr>';
             }
             return seats.map(seat => `
                 <tr>
                     <td>${seat.seatNo}</td>
                     <td>${seat.rollNo}</td>
+                    <td><small>${seat.subject}</small></td>
                 </tr>
             `).join('');
         }

@@ -11,6 +11,7 @@ import lombok.*;
 @Builder
 public class SeatAllocationDTO {
     private String seatNo;
+    private Integer benchNo;
     private String rollNo;
     private String studentName;
     private String department;
