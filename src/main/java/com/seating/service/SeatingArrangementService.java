@@ -77,12 +77,18 @@ public class SeatingArrangementService {
     }
 
     /**
-     * NEW ALLOCATION STRATEGY - ROOM BY ROOM WITH 2-SUBJECT-PER-BENCH
-     * - Processes rooms sequentially (Room 1, Room 2, ...)
-     * - Within each room, processes benches in order (Bench 1, Bench 2, ...)
-     * - Constraint: R and L must have DIFFERENT subjects, M must match EITHER R or L
-     * - Pattern: Each bench has exactly 2 subjects, with M duplicating either R or L
-     * - Subject sequence continues from one room to the next
+     * NEW ALLOCATION STRATEGY - ROOM-BY-ROOM POSITION-BY-POSITION WITH 2-SUBJECT-PER-BENCH
+     * Rules:
+     * 1) L and R have different subjects (R ≠ L)
+     * 2) M is continuation of either L or R (M = R's subject OR M = L's subject)
+     * 3) Sequence is maintained (rooms in ID order, seats in bench order)
+     * 4) R, M, L of the room completed before moving to next room
+     * 5) Subject sequence continues from one room to the next
+     *
+     * Process:
+     * - Room 1: All R seats → All M seats → All L seats
+     * - Room 2: All R seats → All M seats → All L seats (subjects continue from Room 1)
+     * - Room 3: All R seats → All M seats → All L seats (subjects continue from Room 2)
      */
     private List<SeatingArrangement> allocateSeats(List<Student> students, List<Room> rooms,
                                                    SeatingFilterDTO filter) {
@@ -123,7 +129,7 @@ public class SeatingArrangementService {
             return arrangements;
         }
 
-        // Initialize subject trackers for R and L (M will match one of them)
+        // Initialize subject trackers for R and L (will persist across rooms)
         int rSubjectIndex = 0;
         int lSubjectIndex = 1;
 
@@ -132,163 +138,219 @@ public class SeatingArrangementService {
 
         log.info("Starting allocation - R: {}, L: {}, M: will match R or L", rCurrentSubject, lCurrentSubject);
 
-        // Sort rooms by room number for sequential processing
+        // Sort rooms by room ID (numeric order)
         List<Room> sortedRooms = rooms.stream()
-                .sorted(Comparator.comparing(Room::getRoomNo))
+                .sorted(Comparator.comparing(Room::getId))
                 .collect(Collectors.toList());
 
         // Process each room in order
         for (Room room : sortedRooms) {
-            log.info("Processing room: {}", room.getRoomNo());
+            log.info("=== Processing Room: {} ===", room.getRoomNo());
 
             // Get all seats for this room
             List<Seat> roomSeats = seatRepository.findAvailableSeatsByRoom(room.getId());
 
             if (roomSeats.isEmpty()) {
-                log.warn("No available seats in room {}", room.getRoomNo());
+                log.warn("No seats in room {}", room.getRoomNo());
                 continue;
             }
 
-            // Group seats by bench
-            Map<Integer, List<Seat>> seatsByBench = new HashMap<>();
-            for (Seat seat : roomSeats) {
-                seatsByBench.computeIfAbsent(seat.getBenchNo(), k -> new ArrayList<>()).add(seat);
+            // Sort seats by bench number and position
+            roomSeats.sort(Comparator
+                    .comparing(Seat::getBenchNo)
+                    .thenComparing(Seat::getPosition));
+
+            // Separate seats by position
+            List<Seat> rSeats = roomSeats.stream()
+                    .filter(s -> "R".equals(s.getPosition()))
+                    .collect(Collectors.toList());
+            List<Seat> mSeats = roomSeats.stream()
+                    .filter(s -> "M".equals(s.getPosition()))
+                    .collect(Collectors.toList());
+            List<Seat> lSeats = roomSeats.stream()
+                    .filter(s -> "L".equals(s.getPosition()))
+                    .collect(Collectors.toList());
+
+            log.info("Room {} seats - R: {}, M: {}, L: {}", room.getRoomNo(), rSeats.size(), mSeats.size(), lSeats.size());
+
+            // PHASE 1 (PER ROOM): Allocate ALL R seats in this room
+            log.info("  Phase 1: Allocating R seats in room {}", room.getRoomNo());
+            for (Seat rSeat : rSeats) {
+                if (rSeat.getIsOccupied()) {
+                    continue;
+                }
+
+                Student rStudent = findNextUnallocatedStudent(studentsBySubject.get(rCurrentSubject));
+
+                // If current subject exhausted, switch to next
+                if (rStudent == null) {
+                    log.info("  R-position: Subject {} exhausted, switching to next", rCurrentSubject);
+                    boolean found = false;
+                    for (int i = 1; i <= numSubjects; i++) {
+                        int testIndex = (rSubjectIndex + i) % numSubjects;
+                        String testSubject = orderedSubjects.get(testIndex);
+
+                        // Skip L's current subject to maintain R≠L
+                        if (testSubject.equals(lCurrentSubject)) {
+                            continue;
+                        }
+
+                        rStudent = findNextUnallocatedStudent(studentsBySubject.get(testSubject));
+                        if (rStudent != null) {
+                            rSubjectIndex = testIndex;
+                            rCurrentSubject = testSubject;
+                            log.info("  R-position: Switched to subject {}", rCurrentSubject);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        log.warn("  No more students available for R position");
+                        break;
+                    }
+                }
+
+                if (rStudent != null) {
+                    arrangements.add(createArrangement(rStudent, rSeat, rCurrentSubject, filter));
+                    rStudent.setIsAllocated(true);
+                    rSeat.setIsOccupied(true);
+                }
             }
 
-            // Sort bench numbers for sequential processing
-            List<Integer> benchNumbers = new ArrayList<>(seatsByBench.keySet());
-            benchNumbers.sort(Integer::compareTo);
+            // PHASE 2 (PER ROOM): Allocate ALL M seats in this room
+            log.info("  Phase 2: Allocating M seats in room {}", room.getRoomNo());
+            for (Seat mSeat : mSeats) {
+                if (mSeat.getIsOccupied()) {
+                    continue;
+                }
 
-            // Process each bench in order
-            for (Integer benchNo : benchNumbers) {
-                List<Seat> benchSeats = seatsByBench.get(benchNo);
+                // Find corresponding R and L on same bench
+                Seat correspondingR = rSeats.stream()
+                        .filter(s -> s.getBenchNo().equals(mSeat.getBenchNo()))
+                        .findFirst()
+                        .orElse(null);
 
-                // Find R, M, L seats on this bench
-                Seat rSeat = benchSeats.stream().filter(s -> "R".equals(s.getPosition())).findFirst().orElse(null);
-                Seat mSeat = benchSeats.stream().filter(s -> "M".equals(s.getPosition())).findFirst().orElse(null);
-                Seat lSeat = benchSeats.stream().filter(s -> "L".equals(s.getPosition())).findFirst().orElse(null);
+                Seat correspondingL = lSeats.stream()
+                        .filter(s -> s.getBenchNo().equals(mSeat.getBenchNo()))
+                        .findFirst()
+                        .orElse(null);
 
-                // ALLOCATE R POSITION
-                Student rStudent = null;
-                if (rSeat != null && !rSeat.getIsOccupied()) {
-                    rStudent = findNextUnallocatedStudent(studentsBySubject.get(rCurrentSubject));
+                // Get subjects allocated to R and L on this bench
+                String benchRSubject = null;
+                String benchLSubject = null;
 
-                    // If current subject exhausted, switch to next
-                    if (rStudent == null) {
-                        log.info("R-position: Subject {} exhausted, switching to next", rCurrentSubject);
-                        boolean found = false;
-                        for (int i = 1; i <= numSubjects; i++) {
-                            int testIndex = (rSubjectIndex + i) % numSubjects;
-                            String testSubject = orderedSubjects.get(testIndex);
-
-                            // Skip L's current subject to maintain R≠L
-                            if (testSubject.equals(lCurrentSubject)) {
-                                continue;
-                            }
-
-                            rStudent = findNextUnallocatedStudent(studentsBySubject.get(testSubject));
-                            if (rStudent != null) {
-                                rSubjectIndex = testIndex;
-                                rCurrentSubject = testSubject;
-                                log.info("R-position: Switched to subject {}", rCurrentSubject);
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            log.warn("No more students available for R position");
-                        }
-                    }
-
-                    if (rStudent != null) {
-                        arrangements.add(createArrangement(rStudent, rSeat, rCurrentSubject, filter));
-                        rStudent.setIsAllocated(true);
-                        rSeat.setIsOccupied(true);
+                if (correspondingR != null) {
+                    SeatingArrangement rArrangement = arrangements.stream()
+                            .filter(a -> a.getSeat().getId().equals(correspondingR.getId()))
+                            .findFirst()
+                            .orElse(null);
+                    if (rArrangement != null) {
+                        benchRSubject = rArrangement.getSubject();
                     }
                 }
 
-                // ALLOCATE L POSITION
-                Student lStudent = null;
-                if (lSeat != null && !lSeat.getIsOccupied()) {
-                    lStudent = findNextUnallocatedStudent(studentsBySubject.get(lCurrentSubject));
-
-                    // If current subject exhausted, switch to next
-                    if (lStudent == null) {
-                        log.info("L-position: Subject {} exhausted, switching to next", lCurrentSubject);
-                        boolean found = false;
-                        for (int i = 1; i <= numSubjects; i++) {
-                            int testIndex = (lSubjectIndex + i) % numSubjects;
-                            String testSubject = orderedSubjects.get(testIndex);
-
-                            // Skip R's current subject to maintain R≠L
-                            if (testSubject.equals(rCurrentSubject)) {
-                                continue;
-                            }
-
-                            lStudent = findNextUnallocatedStudent(studentsBySubject.get(testSubject));
-                            if (lStudent != null) {
-                                lSubjectIndex = testIndex;
-                                lCurrentSubject = testSubject;
-                                log.info("L-position: Switched to subject {}", lCurrentSubject);
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            log.warn("No more students available for L position");
-                        }
-                    }
-
-                    if (lStudent != null) {
-                        arrangements.add(createArrangement(lStudent, lSeat, lCurrentSubject, filter));
-                        lStudent.setIsAllocated(true);
-                        lSeat.setIsOccupied(true);
+                if (correspondingL != null) {
+                    SeatingArrangement lArrangement = arrangements.stream()
+                            .filter(a -> a.getSeat().getId().equals(correspondingL.getId()))
+                            .findFirst()
+                            .orElse(null);
+                    if (lArrangement != null) {
+                        benchLSubject = lArrangement.getSubject();
                     }
                 }
 
-                // ALLOCATE M POSITION - Match whichever (R or L) has more students available
-                if (mSeat != null && !mSeat.getIsOccupied()) {
-                    String mSubject = null;
-                    Student mStudent = null;
+                // M matches whichever (R or L) has more students available
+                String mSubject = null;
+                Student mStudent = null;
 
-                    // Count available students for R and L subjects
-                    int rSubjectAvailable = countUnallocatedStudents(studentsBySubject.get(rCurrentSubject));
-                    int lSubjectAvailable = countUnallocatedStudents(studentsBySubject.get(lCurrentSubject));
+                // Case 1: Both R and L exist on this bench
+                if (benchRSubject != null && benchLSubject != null) {
+                    int rSubjectAvailable = countUnallocatedStudents(studentsBySubject.get(benchRSubject));
+                    int lSubjectAvailable = countUnallocatedStudents(studentsBySubject.get(benchLSubject));
 
-                    // M matches whichever has more students
                     if (rSubjectAvailable >= lSubjectAvailable) {
-                        mSubject = rCurrentSubject;
-                        mStudent = findNextUnallocatedStudent(studentsBySubject.get(rCurrentSubject));
-                        if (mStudent != null) {
-                            log.debug("M-position: Matching R subject {}", mSubject);
-                        }
+                        mSubject = benchRSubject;
+                        mStudent = findNextUnallocatedStudent(studentsBySubject.get(benchRSubject));
                     } else {
-                        mSubject = lCurrentSubject;
-                        mStudent = findNextUnallocatedStudent(studentsBySubject.get(lCurrentSubject));
-                        if (mStudent != null) {
-                            log.debug("M-position: Matching L subject {}", mSubject);
-                        }
+                        mSubject = benchLSubject;
+                        mStudent = findNextUnallocatedStudent(studentsBySubject.get(benchLSubject));
                     }
 
-                    // If no students in preferred subject, try the other
+                    // If preferred subject exhausted, try the other
                     if (mStudent == null) {
-                        String alternateSubject = mSubject.equals(rCurrentSubject) ? lCurrentSubject : rCurrentSubject;
+                        String alternateSubject = mSubject.equals(benchRSubject) ? benchLSubject : benchRSubject;
                         mStudent = findNextUnallocatedStudent(studentsBySubject.get(alternateSubject));
                         if (mStudent != null) {
                             mSubject = alternateSubject;
-                            log.debug("M-position: Using alternate subject {}", mSubject);
                         }
                     }
+                }
+                // Case 2: Only R exists on this bench (no L seat)
+                else if (benchRSubject != null) {
+                    mSubject = benchRSubject;
+                    mStudent = findNextUnallocatedStudent(studentsBySubject.get(benchRSubject));
+                }
+                // Case 3: Only L exists on this bench (no R seat)
+                else if (benchLSubject != null) {
+                    mSubject = benchLSubject;
+                    mStudent = findNextUnallocatedStudent(studentsBySubject.get(benchLSubject));
+                }
 
-                    if (mStudent != null) {
-                        arrangements.add(createArrangement(mStudent, mSeat, mSubject, filter));
-                        mStudent.setIsAllocated(true);
-                        mSeat.setIsOccupied(true);
-                    } else {
-                        log.warn("No more students available for M position on bench {}", benchNo);
-                    }
+                if (mStudent != null && mSubject != null) {
+                    arrangements.add(createArrangement(mStudent, mSeat, mSubject, filter));
+                    mStudent.setIsAllocated(true);
+                    mSeat.setIsOccupied(true);
+                } else {
+                    log.warn("  Could not allocate M seat - Bench: {}, R subject: {}, L subject: {}",
+                             mSeat.getBenchNo(), benchRSubject, benchLSubject);
                 }
             }
+
+            // PHASE 3 (PER ROOM): Allocate ALL L seats in this room
+            log.info("  Phase 3: Allocating L seats in room {}", room.getRoomNo());
+            for (Seat lSeat : lSeats) {
+                if (lSeat.getIsOccupied()) {
+                    continue;
+                }
+
+                Student lStudent = findNextUnallocatedStudent(studentsBySubject.get(lCurrentSubject));
+
+                // If current subject exhausted, switch to next
+                if (lStudent == null) {
+                    log.info("  L-position: Subject {} exhausted, switching to next", lCurrentSubject);
+                    boolean found = false;
+                    for (int i = 1; i <= numSubjects; i++) {
+                        int testIndex = (lSubjectIndex + i) % numSubjects;
+                        String testSubject = orderedSubjects.get(testIndex);
+
+                        // Skip R's current subject to maintain R≠L
+                        if (testSubject.equals(rCurrentSubject)) {
+                            continue;
+                        }
+
+                        lStudent = findNextUnallocatedStudent(studentsBySubject.get(testSubject));
+                        if (lStudent != null) {
+                            lSubjectIndex = testIndex;
+                            lCurrentSubject = testSubject;
+                            log.info("  L-position: Switched to subject {}", lCurrentSubject);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        log.warn("  No more students available for L position");
+                        break;
+                    }
+                }
+
+                if (lStudent != null) {
+                    arrangements.add(createArrangement(lStudent, lSeat, lCurrentSubject, filter));
+                    lStudent.setIsAllocated(true);
+                    lSeat.setIsOccupied(true);
+                }
+            }
+
+            log.info("=== Completed Room: {} ===", room.getRoomNo());
         }
 
         // Log subject distribution

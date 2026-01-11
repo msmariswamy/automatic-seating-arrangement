@@ -114,17 +114,24 @@ This strategy ensures:
 - Subject with second-most students is allocated to L positions
 - M matches whichever (R or L) has more students available at each bench
 
-**Allocation Process:**
-1. Rooms are sorted by room number (Room 1, Room 2, Room 3, ...)
-2. For each room in order:
-   - Get all seats for this room
-   - Group seats by bench number
-   - Sort benches in order (Bench 1, Bench 2, Bench 3, ...)
-3. For each bench in order:
-   - **Allocate R position** from current R subject (if students available, else switch to next subject ≠ L)
-   - **Allocate L position** from current L subject (if students available, else switch to next subject ≠ R)
-   - **Allocate M position** from whichever subject (R or L) has more unallocated students
-4. Subject sequence continues from one room to the next (R and L maintain their subject blocks across room boundaries)
+**Allocation Process (Room-by-Room, Position-by-Position):**
+1. Rooms are sorted by room ID (numeric order: 11 → 101 → 105 → 106)
+2. Subject trackers (R subject, L subject) persist across all rooms
+3. **For EACH room in order:**
+   - **Phase 1 (Per Room): Allocate ALL R seats in this room**
+     - Process R1, R2, R3... in sequence within the room
+     - Use current R subject (continues from previous room)
+     - If R subject exhausted, switch to next available subject (skip L's subject to maintain R≠L)
+   - **Phase 2 (Per Room): Allocate ALL M seats in this room**
+     - Process M1, M2, M3... in sequence within the room
+     - For each M seat, find corresponding R and L on same bench
+     - M matches whichever (R or L) has more unallocated students
+     - If only R exists (no L), M matches R; if only L exists (no R), M matches L
+   - **Phase 3 (Per Room): Allocate ALL L seats in this room**
+     - Process L1, L2, L3... in sequence within the room
+     - Use current L subject (continues from previous room)
+     - If L subject exhausted, switch to next available subject (skip R's subject to maintain R≠L)
+4. Move to next room and repeat (subject sequence continues)
 
 **Subject Switching Logic:**
 - **R position switching:**
@@ -352,6 +359,21 @@ Room 24:
   - **Old issue**: Seats starting at R9 instead of R1 (sequencing problem)
   - **Solution**: Process rooms in order, then benches in order within each room
   - **Result**: Seats now start from R1/M1/L1 in each room
+
+- **Fixed**: Room processing order
+  - **Old issue**: Rooms sorted by room number (String), causing "101" to come before "11" (alphabetical order)
+  - **Solution**: Sort rooms by room ID (Long) instead of room number (String) for proper numeric ordering
+  - **Result**: Rooms now processed in correct numeric order: Room 11 → Room 101 → Room 105 → Room 106
+
+- **Fixed**: Allocation order - Changed to room-by-room position-by-position
+  - **Old behavior**: Allocated all R seats across ALL rooms, then all M seats, then all L seats
+  - **Issue**: Didn't follow rule 4 "R, M, L of the room should be used and then move to next room"
+  - **New behavior** (room-by-room):
+    - **Room 11**: Phase 1 (all R seats) → Phase 2 (all M seats) → Phase 3 (all L seats)
+    - **Room 101**: Phase 1 (all R seats) → Phase 2 (all M seats) → Phase 3 (all L seats)
+    - **Room 105**: Phase 1 (all R seats) → Phase 2 (all M seats) → Phase 3 (all L seats)
+    - **Room 106**: Phase 1 (all R seats) → Phase 2 (all M seats) → Phase 3 (all L seats)
+  - **Result**: Each room completed fully before moving to next room, subject sequence continues across rooms
 
 - **Fixed**: Subject constraint logic
   - **Old constraint**: R≠M≠L (all different on same bench)
