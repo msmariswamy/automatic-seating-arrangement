@@ -60,11 +60,31 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.08);
         }
         #subjectCheckboxes {
-            max-height: 450px;
-            overflow-y: auto;
-            border: 1px solid #e0e0e0;
-            border-radius: 5px;
-            padding: 10px;
+           // max-height: 450px;
+           // overflow-y: auto;
+           // border: 1px solid #e0e0e0;
+           // border-radius: 5px;
+           // padding: 10px;
+        }
+        .department-section {
+            margin-bottom: 15px;
+        }
+        .department-header {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .subject-list {
+            margin-left: 25px;
+            padding-left: 15px;
+            border-left: 2px solid #e0e0e0;
+        }
+        .subject-list .form-check {
+            margin-bottom: 6px;
+        }
+        .subject-list .form-check-label {
+            color: #555;
+            font-size: 0.95rem;
         }
     </style>
 </head>
@@ -191,25 +211,17 @@
             <div class="card-body">
                 <div class="filter-section">
                     <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <h6>Select Departments</h6>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="selectAllDepartments">
-                                <label class="form-check-label fw-bold" for="selectAllDepartments">Select All</label>
-                            </div>
-                            <div id="departmentCheckboxes"></div>
-                        </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-6 mb-3">
                             <h6>Select Classes</h6>
                             <div id="classCheckboxes"></div>
                         </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-6 mb-3">
                             <h6>Select Subjects</h6>
                             <div class="mb-2">
                                 <input type="text" class="form-control form-control-sm" id="subjectSearch"
                                        placeholder="Search subjects...">
                             </div>
-                            <div id="subjectCheckboxess"></div>
+                            <div id="subjectCheckboxes"></div>
                         </div>
                     </div>
                     <div class="row">
@@ -252,26 +264,10 @@
         }
 
         function loadFilters() {
-            // Load department-subject mapping first
+            // Load department-subject mapping and build hierarchy
             $.get('/api/students/department-subjects', function(data) {
                 departmentSubjectMapping = data;
-            });
-
-            $.get('/api/students/departments', function(data) {
-                let html = '';
-                data.forEach(dept => {
-                    html += `<div class="form-check">
-                        <input class="form-check-input department-checkbox" type="checkbox" value="${dept}" id="dept_${dept}">
-                        <label class="form-check-label" for="dept_${dept}">${dept}</label>
-                    </div>`;
-                });
-                $('#departmentCheckboxes').html(html);
-
-                // Add event listeners to individual department checkboxes
-                $('.department-checkbox').on('change', function() {
-                    updateSelectAllDepartments();
-                    handleDepartmentChange($(this));
-                });
+                buildSubjectHierarchy();
             });
 
             $.get('/api/students/classes', function(data) {
@@ -284,18 +280,36 @@
                 });
                 $('#classCheckboxes').html(html);
             });
+        }
 
-            $.get('/api/students/subjects', function(data) {
-                let html = '';
-                data.forEach(subj => {
-                    let escapedId = 'subj_' + subj.replace(/[^a-zA-Z0-9]/g, '_');
-                    html += `<div class="form-check subject-item" data-subject="${subj}">
+        function buildSubjectHierarchy() {
+            let html = '';
+
+            // Sort departments alphabetically
+            let sortedDepartments = Object.keys(departmentSubjectMapping).sort();
+
+            sortedDepartments.forEach(dept => {
+                let deptId = dept.replace(/[^a-zA-Z0-9]/g, '_');
+                let subjects = departmentSubjectMapping[dept] || [];
+
+                html += `<div class="department-section" data-department="${dept}">
+                    <div class="department-header">
+                        <i class="fas fa-graduation-cap"></i> ${dept}
+                    </div>
+                    <div class="subject-list" id="subjects_${deptId}">`;
+
+                subjects.forEach(subj => {
+                    let escapedId = 'subj_' + dept.replace(/[^a-zA-Z0-9]/g, '_') + '_' + subj.replace(/[^a-zA-Z0-9]/g, '_');
+                    html += `<div class="form-check subject-item" data-subject="${subj}" data-department="${dept}">
                         <input class="form-check-input subject-checkbox" type="checkbox" value="${subj}" id="${escapedId}">
                         <label class="form-check-label" for="${escapedId}">${subj}</label>
                     </div>`;
                 });
-                $('#subjectCheckboxess').html(html);
+
+                html += `</div></div>`;
             });
+
+            $('#subjectCheckboxes').html(html);
         }
 
         function uploadStudents() {
@@ -354,28 +368,29 @@
         }
 
         function generateSeating() {
-            let departments = [];
-            $('#departmentCheckboxes input:checked').each(function() {
-                departments.push($(this).val());
-            });
-
             let classes = [];
             $('#classCheckboxes input:checked').each(function() {
                 classes.push($(this).val());
             });
 
             let subjects = [];
-            $('#subjectCheckboxess input:checked').each(function() {
+            let departments = new Set();
+            $('#subjectCheckboxes input:checked').each(function() {
                 subjects.push($(this).val());
+                // Get department from data attribute
+                let dept = $(this).closest('.subject-item').data('department');
+                if (dept) {
+                    departments.add(dept);
+                }
             });
 
-            if (!departments.length || !classes.length || !subjects.length) {
-                alert('Please select departments, classes, and subjects');
+            if (!classes.length || !subjects.length) {
+                alert('Please select classes and subjects');
                 return;
             }
 
             let filterData = {
-                departments: departments,
+                departments: Array.from(departments),
                 classes: classes,
                 subjects: subjects,
                 arrangementName: $('#arrangementName').val()
@@ -431,55 +446,37 @@
             }
         }
 
-        // Handle select all departments checkbox
-        $('#selectAllDepartments').on('change', function() {
-            let isChecked = $(this).is(':checked');
-            $('.department-checkbox').prop('checked', isChecked);
-        });
-
-        // Update select all checkbox state based on individual checkboxes
-        function updateSelectAllDepartments() {
-            let totalCheckboxes = $('.department-checkbox').length;
-            let checkedCheckboxes = $('.department-checkbox:checked').length;
-
-            if (checkedCheckboxes === 0) {
-                $('#selectAllDepartments').prop('checked', false);
-                $('#selectAllDepartments').prop('indeterminate', false);
-            } else if (checkedCheckboxes === totalCheckboxes) {
-                $('#selectAllDepartments').prop('checked', true);
-                $('#selectAllDepartments').prop('indeterminate', false);
-            } else {
-                $('#selectAllDepartments').prop('checked', false);
-                $('#selectAllDepartments').prop('indeterminate', true);
-            }
-        }
-
         // Handle subject search functionality
         $('#subjectSearch').on('keyup', function() {
             let searchText = $(this).val().toLowerCase();
 
-            $('.subject-item').each(function() {
-                let subjectText = $(this).find('label').text().toLowerCase();
+            if (searchText === '') {
+                $('.subject-item').show();
+                $('.department-section').show();
+            } else {
+                $('.department-section').each(function() {
+                    let deptSection = $(this);
+                    let hasVisibleSubject = false;
 
-                if (subjectText.includes(searchText)) {
-                    $(this).show();
-                } else {
-                    $(this).hide();
-                }
-            });
+                    deptSection.find('.subject-item').each(function() {
+                        let subjectText = $(this).find('label').text().toLowerCase();
+                        if (subjectText.includes(searchText)) {
+                            $(this).show();
+                            hasVisibleSubject = true;
+                        } else {
+                            $(this).hide();
+                        }
+                    });
+
+                    // Hide department section if no subjects match
+                    if (hasVisibleSubject) {
+                        deptSection.show();
+                    } else {
+                        deptSection.hide();
+                    }
+                });
+            }
         });
-
-        // Handle department checkbox change - auto-select subjects
-        function handleDepartmentChange(deptCheckbox) {
-            let department = deptCheckbox.val();
-            let isChecked = deptCheckbox.is(':checked');
-            let subjects = departmentSubjectMapping[department] || [];
-
-            subjects.forEach(subject => {
-                // Find the subject checkbox using data attribute and update its state
-                $(`.subject-item[data-subject="${subject}"]`).find('.subject-checkbox').prop('checked', isChecked);
-            });
-        }
     </script>
 </body>
 </html>
