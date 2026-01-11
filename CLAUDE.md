@@ -361,54 +361,105 @@ This means only one arrangement can be "active" at a time, but historical arrang
 ### Verifying Correct Allocation
 
 **Expected Output:**
-- Each bench should have exactly **2 subjects** (R≠L, M matches either R or L)
-- Seats should start from R1/M1/L1 in each room (sequential allocation)
-- Each position (R, L) should show continuous blocks of the same subject
-- M should alternate between R's subject and L's subject based on availability
-- Rooms should be processed in order (Room 1, then Room 2, then Room 3, ...)
+- **Room-by-room processing**: Each room fully allocated (R→M→L) before moving to next room
+- **Each bench has exactly 2 subjects**: R≠L, M matches either R or L
+- **Sequential seats in each room**: R1, R2, R3... then M1, M2, M3... then L1, L2, L3...
+- **Continuous subject blocks**: R and L maintain same subject across room boundaries
+- **Rooms processed in numeric ID order**: Room 11 → Room 101 → Room 105 → Room 106
 
 **Sample Log Output:**
 ```
 Students found per subject:
   Commerce-VI -> 50 students
-  History -> 40 students
+  India in World Politics -> 40 students
 
-Starting allocation - R: Commerce-VI, L: History, M: will match R or L
-Processing room: Room 1
-Processing room: Room 2
-R-position: Subject Commerce-VI exhausted, switching to next
-R-position: Switched to subject History
-L-position: Subject History exhausted, switching to next
+Subjects ordered by count: [Commerce-VI, India in World Politics]
+Starting allocation - R: Commerce-VI, L: India in World Politics, M: will match R or L
+
+=== Processing Room: 11 ===
+Room 11 seats - R: 11, M: 0, L: 11
+  Phase 1: Allocating R seats in room 11
+  Phase 2: Allocating M seats in room 11
+  Phase 3: Allocating L seats in room 11
+=== Completed Room: 11 ===
+
+=== Processing Room: 101 ===
+Room 101 seats - R: 8, M: 8, L: 0
+  Phase 1: Allocating R seats in room 101
+  Phase 2: Allocating M seats in room 101
+  Phase 3: Allocating L seats in room 101
+=== Completed Room: 101 ===
+
+=== Processing Room: 105 ===
+Room 105 seats - R: 16, M: 16, L: 16
+  Phase 1: Allocating R seats in room 105
+  Phase 2: Allocating M seats in room 105
+  Phase 3: Allocating L seats in room 105
+=== Completed Room: 105 ===
 
 Seating allocation complete: 90 students allocated
-Subject distribution: {Commerce-VI=50, History=40}
+Subject distribution: {Commerce-VI=50, India in World Politics=40}
 ```
 
 **Red Flags:**
 - **R and L having the same subject on any bench** (violates R≠L constraint)
 - **M having a subject different from both R and L** (violates M=R or M=L rule)
-- **Seats starting at R9 instead of R1** (indicates sequencing issue)
-- **Large number of unallocated students when seats are available** (indicates logic error)
+- **Rooms processed out of order** (e.g., Room 101 before Room 11)
+- **M seats showing "No seats" when they exist in database** (Phase 2 allocation failing)
+- **Large number of unallocated students when seats are available** (logic error)
 
-**Correct Pattern Example:**
+**Correct Pattern Example (Room 11):**
 ```
-Room 24:
-  Bench 1: R1=Commerce-VI,  M1=Commerce-VI,  L1=History     ✓ (M matches R, R≠L)
-  Bench 2: R2=Commerce-VI,  M2=History,      L2=History     ✓ (M matches L, R≠L)
-  Bench 3: R3=Commerce-VI,  M3=Commerce-VI,  L3=History     ✓ (M matches R, R≠L)
+Right Seats (R):          Middle Seats (M):         Left Seats (L):
+R1  = AF23001  (Comm-VI)  (no M seats in Room 11)   L1  = BA21131  (India in WP)
+R2  = BA23132  (Comm-VI)                            L2  = BA22110  (India in WP)
+R3  = BC20013  (Comm-VI)                            L3  = BA23007  (India in WP)
+...                                                  ...
+R11 = BC21408  (Comm-VI)                            L11 = BA23038  (India in WP)
+
+✓ All R seats in series
+✓ All L seats in series
+✓ R ≠ L (different subjects)
+```
+
+**Correct Pattern Example (Room 101):**
+```
+Right Seats (R):          Middle Seats (M):         Left Seats (L):
+R1  = BC21409  (Comm-VI)  M1 = BC21415  (Comm-VI)   (no L seats in Room 101)
+R2  = BC21410  (Comm-VI)  M2 = BC21416  (Comm-VI)
+R3  = BC21411  (Comm-VI)  M3 = BC21417  (Comm-VI)
+...                       ...
+R8  = BC21414  (Comm-VI)  M8 = BC21422  (Comm-VI)
+
+✓ All R seats in series
+✓ All M seats in series
+✓ M matches R (both Commerce-VI)
+✓ Commerce-VI continues from Room 11 (seamless)
 ```
 
 **Incorrect Pattern Example:**
 ```
-Room 24:
-  Bench 1: R9=Commerce-VI,  M1=Commerce-VI,  L1=(No seats)  ✗ (Should start at R1, L missing)
+Room 11:
+  Right: R9, R10, R11...    ✗ (Should start at R1)
+  Middle: No seats          ✗ (If DB has M seats, they should be allocated)
+  Left: L1, L2, L3...       ✓ (Correct)
 ```
 
 ## Recent Changes
 
 ### January 2026 - Complete Algorithm Rewrite
 
-**Major Algorithm Changes - 2-Subject-Per-Bench Strategy:**
+**Implementation of 5 Core Rules:**
+
+The seating allocation algorithm was completely rewritten to implement these exact requirements:
+
+1. ✅ **L and R have different subjects** - R and L positions always have different subjects on the same bench
+2. ✅ **M is continuation of either L or R** - M matches whichever (R or L) has more students available
+3. ✅ **Sequence is maintained** - Rooms processed in ID order, seats allocated R1→R2→R3, M1→M2→M3, L1→L2→L3
+4. ✅ **R, M, L of room completed before moving to next room** - Room-by-room processing (Room 11 R→M→L complete, then Room 101 R→M→L)
+5. ✅ **Subject sequence continues from room to room** - R and L subjects maintain across room boundaries seamlessly
+
+**Major Algorithm Changes - Room-by-Room 2-Subject-Per-Bench Strategy:**
 
 - **COMPLETE REWRITE**: Changed to room-by-room 2-subject-per-bench allocation
   - **Old behavior**: R, M, L all had different subjects (3 subjects per bench with offset strategy)
