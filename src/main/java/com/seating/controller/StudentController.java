@@ -123,6 +123,17 @@ public class StudentController {
         }
     }
 
+    @GetMapping("/department-subjects")
+    public ResponseEntity<Map<String, List<String>>> getDepartmentSubjects() {
+        try {
+            Map<String, List<String>> mapping = studentService.getDepartmentSubjectMapping();
+            return ResponseEntity.ok(mapping);
+        } catch (Exception e) {
+            log.error("Error fetching department-subject mapping: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @DeleteMapping
     public ResponseEntity<Map<String, Object>> deleteAllStudents() {
         Map<String, Object> response = new HashMap<>();

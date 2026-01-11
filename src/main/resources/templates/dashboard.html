@@ -60,7 +60,7 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.08);
         }
         #subjectCheckboxes {
-            max-height: 300px;
+            max-height: 450px;
             overflow-y: auto;
             border: 1px solid #e0e0e0;
             border-radius: 5px;
@@ -209,7 +209,7 @@
                                 <input type="text" class="form-control form-control-sm" id="subjectSearch"
                                        placeholder="Search subjects...">
                             </div>
-                            <div id="subjectCheckboxes"></div>
+                            <div id="subjectCheckboxess"></div>
                         </div>
                     </div>
                     <div class="row">
@@ -233,6 +233,8 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script>
+        let departmentSubjectMapping = {};
+
         $(document).ready(function() {
             loadStatistics();
             loadFilters();
@@ -250,6 +252,11 @@
         }
 
         function loadFilters() {
+            // Load department-subject mapping first
+            $.get('/api/students/department-subjects', function(data) {
+                departmentSubjectMapping = data;
+            });
+
             $.get('/api/students/departments', function(data) {
                 let html = '';
                 data.forEach(dept => {
@@ -261,7 +268,10 @@
                 $('#departmentCheckboxes').html(html);
 
                 // Add event listeners to individual department checkboxes
-                $('.department-checkbox').on('change', updateSelectAllDepartments);
+                $('.department-checkbox').on('change', function() {
+                    updateSelectAllDepartments();
+                    handleDepartmentChange($(this));
+                });
             });
 
             $.get('/api/students/classes', function(data) {
@@ -278,12 +288,13 @@
             $.get('/api/students/subjects', function(data) {
                 let html = '';
                 data.forEach(subj => {
-                    html += `<div class="form-check subject-item">
-                        <input class="form-check-input" type="checkbox" value="${subj}" id="subj_${subj}">
-                        <label class="form-check-label" for="subj_${subj}">${subj}</label>
+                    let escapedId = 'subj_' + subj.replace(/[^a-zA-Z0-9]/g, '_');
+                    html += `<div class="form-check subject-item" data-subject="${subj}">
+                        <input class="form-check-input subject-checkbox" type="checkbox" value="${subj}" id="${escapedId}">
+                        <label class="form-check-label" for="${escapedId}">${subj}</label>
                     </div>`;
                 });
-                $('#subjectCheckboxes').html(html);
+                $('#subjectCheckboxess').html(html);
             });
         }
 
@@ -354,7 +365,7 @@
             });
 
             let subjects = [];
-            $('#subjectCheckboxes input:checked').each(function() {
+            $('#subjectCheckboxess input:checked').each(function() {
                 subjects.push($(this).val());
             });
 
@@ -457,6 +468,18 @@
                 }
             });
         });
+
+        // Handle department checkbox change - auto-select subjects
+        function handleDepartmentChange(deptCheckbox) {
+            let department = deptCheckbox.val();
+            let isChecked = deptCheckbox.is(':checked');
+            let subjects = departmentSubjectMapping[department] || [];
+
+            subjects.forEach(subject => {
+                // Find the subject checkbox using data attribute and update its state
+                $(`.subject-item[data-subject="${subject}"]`).find('.subject-checkbox').prop('checked', isChecked);
+            });
+        }
     </script>
 </body>
 </html>
