@@ -341,8 +341,8 @@ This means only one arrangement can be "active" at a time, but historical arrang
 
 1. **Upload Students**: Download template → Fill data → Upload Excel
 2. **Upload Rooms**: Download template → Fill room configuration → Upload Excel
-3. **Generate Arrangement**: Select departments, classes, subjects → Generate
-4. **View Reports**: Select date → View consolidated or individual room reports → Download PDFs as needed
+3. **Generate Arrangement**: Select classes and subjects (subjects grouped by department, departments auto-determined) → Generate
+4. **View Reports**: Select date → View consolidated or individual room reports (displayed in room ID order) → Download PDFs as needed
 5. **Delete Data**: Delete students/rooms/arrangements as needed to reset the system
 
 ## Troubleshooting
@@ -526,10 +526,33 @@ The seating allocation algorithm was completely rewritten to implement these exa
   - Uses CSS classes and jQuery for dynamic column toggling
   - Subject column shown by default (checkbox checked)
 
+- **Simplified Dashboard UI** (dashboard.html)
+  - **Removed**: Department selection checkboxes
+  - **New behavior**: Subjects are grouped and displayed by department (always visible)
+  - Clean 2-column layout: Classes (50%) | Subjects by Department (50%)
+  - Subjects organized hierarchically with visual indentation and left border
+  - Departments automatically determined from selected subjects
+  - Admin selects classes and subjects only - departments inferred from subject selection
+  - Search functionality works across all subjects regardless of department
+
+**Report Display Fixes:**
+- **Fixed Room Ordering**: Both consolidated and individual room reports now display in correct order
+  - **Issue**: Rooms were sorted alphabetically by room number (String): 101, 105, 106, 11
+  - **Solution**: Added `roomId` field to RoomReportDTO and ConsolidatedReportDTO
+  - **Result**: Rooms now sorted numerically by room ID (Long): 11 → 101 → 105 → 106
+  - Matches the allocation order used in seating generation
+  - Files modified:
+    - `RoomReportDTO.java` - Added roomId field
+    - `ConsolidatedReportDTO.java` - Added roomId field
+    - `SeatingArrangementService.java` - Extract roomId from arrangements, sort by roomId instead of roomNo
+
 **File Changes:**
-- `SeatingArrangementService.java` - Complete rewrite of allocateSeats() method (lines 79-276)
+- `SeatingArrangementService.java` - Complete rewrite of allocateSeats() method (lines 79-276), fixed report sorting (lines 705, 721, 769, 785)
 - `reports.html` - Added Settings section with Show Subject checkbox
+- `dashboard.html` - Simplified UI with subjects grouped by department (no department selection)
+- `RoomReportDTO.java` - Added roomId field for proper sorting
+- `ConsolidatedReportDTO.java` - Added roomId field for proper sorting
 - `build.gradle` - Java 21 and Lombok 1.18.34
 - `gradle/wrapper/gradle-wrapper.properties` - Gradle 8.11.1
 - `gradle.properties` - New file with JAVA_HOME setting
-- `CLAUDE.md` - Updated algorithm documentation, tech stack, troubleshooting
+- `CLAUDE.md` - Updated algorithm documentation, tech stack, troubleshooting, UI changes, report fixes

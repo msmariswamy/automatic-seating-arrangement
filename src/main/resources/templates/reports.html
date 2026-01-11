@@ -139,8 +139,11 @@
             <!-- Consolidated Report -->
             <div class="tab-pane fade show active" id="consolidated" role="tabpanel">
                 <div class="card">
-                    <div class="card-header">
-                        <i class="fas fa-file-alt"></i> Consolidated Report
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-file-alt"></i> Consolidated Report</span>
+                        <button class="btn btn-light btn-sm" onclick="downloadConsolidatedPdf()" id="downloadConsolidatedBtn" style="display:none;">
+                            <i class="fas fa-file-pdf"></i> Download PDF
+                        </button>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
@@ -163,7 +166,66 @@
 
             <!-- Individual Room Reports -->
             <div class="tab-pane fade" id="rooms" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3" id="roomReportsHeader" style="display:none;">
+                    <h5 class="mb-0">Individual Room Reports</h5>
+                    <button class="btn btn-primary" onclick="downloadAllRoomsPdf()">
+                        <i class="fas fa-file-pdf"></i> Download All PDFs (Merged)
+                    </button>
+                </div>
                 <div id="roomReports"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Preview Modal -->
+    <div class="modal fade" id="pdfPreviewModal" tabindex="-1" aria-labelledby="pdfPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pdfPreviewModalLabel">PDF Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <label class="form-label mb-0 me-2"><strong>Font Size (pt):</strong></label>
+                            <div class="input-group input-group-sm" style="width:160px;">
+                                <button class="btn btn-outline-primary" type="button" id="fontDecrease">-</button>
+                                <input type="text" id="fontSizeInput" class="form-control text-center" value="10" readonly>
+                                <button class="btn btn-outline-primary" type="button" id="fontIncrease">+</button>
+                            </div>
+                            <button class="btn btn-sm btn-secondary ms-3" id="refreshPreviewBtn" type="button">
+                                <i class="fas fa-sync"></i> Refresh Preview
+                            </button>
+                        </div>
+                        <div id="pdfNavigation" style="display: none;">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="previousPage()">
+                                <i class="fas fa-chevron-left"></i> Previous
+                            </button>
+                            <span class="mx-2">Page <span id="pageNum">1</span> of <span id="pageCount">1</span></span>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="nextPage()">
+                                Next <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 bg-light" style="height: 600px; overflow: auto;" id="pdfContainer">
+                        <div class="d-flex justify-content-center align-items-center" style="min-height: 550px;">
+                            <div class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2">Loading PDF preview...</p>
+                            </div>
+                        </div>
+                        <canvas id="pdfCanvas" style="display: none;"></canvas>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmDownload()">
+                        <i class="fas fa-download"></i> Download PDF
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -171,9 +233,22 @@
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
+        // Configure PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        let currentPdfType = null; // 'consolidated', 'room', 'all-rooms'
+        let currentPdfParams = {};
+        let pdfModal = null;
+        let pdfDoc = null;
+        let currentPage = 1;
+        let totalPages = 0;
+        let rendering = false;
+
         $(document).ready(function() {
             loadDates();
+            pdfModal = new bootstrap.Modal(document.getElementById('pdfPreviewModal'));
         });
 
         function loadDates() {
@@ -216,6 +291,7 @@
                     </tr>`;
                 });
                 $('#consolidatedTable tbody').html(tbody);
+                $('#downloadConsolidatedBtn').show();
             });
         }
 
@@ -286,6 +362,7 @@
                     `;
                 });
                 $('#roomReports').html(html);
+                $('#roomReportsHeader').show();
             });
         }
 
@@ -314,7 +391,187 @@
         }
 
         function downloadPdf(roomNo, date) {
-            window.location.href = `/api/seating/reports/room/pdf?roomNo=${roomNo}&date=${date}`;
+            currentPdfType = 'room';
+            currentPdfParams = { roomNo: roomNo, date: date };
+            openPreviewModal();
+        }
+
+        function downloadConsolidatedPdf() {
+            let date = $('#arrangementDate').val();
+            if (!date) {
+                alert('Please select a date first');
+                return;
+            }
+            currentPdfType = 'consolidated';
+            currentPdfParams = { date: date };
+            openPreviewModal();
+        }
+
+        function downloadAllRoomsPdf() {
+            let date = $('#arrangementDate').val();
+            if (!date) {
+                alert('Please select a date first');
+                return;
+            }
+            currentPdfType = 'all-rooms';
+            currentPdfParams = { date: date };
+            openPreviewModal();
+        }
+
+        function openPreviewModal() {
+            // Reset to 10pt font size
+            $('#fontSizeInput').val(10);
+            currentPage = 1;
+
+            // Show modal first
+            pdfModal.show();
+
+            // Load preview
+            refreshPreview();
+        }
+
+        // Font size controls (+/-) and refresh handler
+        $('#fontIncrease').on('click', function() {
+            let v = parseInt($('#fontSizeInput').val(), 10) || 10;
+            if (v < 72) {
+                $('#fontSizeInput').val(v + 1);
+                if (pdfModal) refreshPreview();
+            }
+        });
+        $('#fontDecrease').on('click', function() {
+            let v = parseInt($('#fontSizeInput').val(), 10) || 10;
+            if (v > 6) {
+                $('#fontSizeInput').val(v - 1);
+                if (pdfModal) refreshPreview();
+            }
+        });
+        $('#refreshPreviewBtn').on('click', function() { refreshPreview(); });
+
+        function refreshPreview() {
+            let fontSize = parseInt($('#fontSizeInput').val(), 10) || 10;
+            let url = buildPdfUrl(fontSize);
+
+            // Show loading state
+            $('#pdfContainer').html(`
+                <div class="d-flex justify-content-center align-items-center" style="min-height: 550px;">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading PDF preview...</p>
+                    </div>
+                </div>
+            `);
+
+            // Hide page navigation - using continuous scroll
+            $('#pdfNavigation').hide();
+
+            // Load PDF using PDF.js
+            fetch(url)
+                .then(response => response.arrayBuffer())
+                .then(data => pdfjsLib.getDocument({data: data}).promise)
+                .then(pdf => {
+                    pdfDoc = pdf;
+                    totalPages = pdf.numPages;
+
+                    // Clear container for rendered pages
+                    $('#pdfContainer').empty();
+
+                    // Render all pages for continuous scroll
+                    const renderPromises = [];
+                    for (let p = 1; p <= totalPages; p++) {
+                        renderPromises.push(renderPageToCanvas(p, fontSize));
+                    }
+
+                    return Promise.all(renderPromises).then(() => {
+                        // update page info
+                        $('#pageCount').text(totalPages);
+                        $('#pageNum').text(1);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading PDF:', error);
+                    $('#pdfContainer').html(`
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle"></i> Error loading PDF preview
+                        </div>
+                    `);
+                });
+        }
+
+        // Render a specific page into its own canvas and append to container (for continuous scroll)
+        function renderPageToCanvas(pageNumber, fontSize) {
+            return pdfDoc.getPage(pageNumber).then(page => {
+                // scale viewport based on font size so preview reflects chosen font
+                const baseScale = 1.5; // default scale for 10pt
+                const scale = baseScale * (fontSize / 10);
+                const viewport = page.getViewport({scale: scale});
+
+                const canvas = document.createElement('canvas');
+                canvas.style.display = 'block';
+                canvas.style.margin = '10px auto';
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                const context = canvas.getContext('2d');
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+
+                // Add a wrapper to show page number label if needed
+                const wrapper = document.createElement('div');
+                wrapper.className = 'pdf-page-wrapper';
+                wrapper.style.textAlign = 'center';
+                wrapper.appendChild(canvas);
+
+                $('#pdfContainer').append(wrapper);
+
+                return page.render(renderContext).promise.then(() => {
+                    // nothing else per page
+                });
+            });
+        }
+
+        // Keep previous/next for compatibility but hide navigation in continuous mode
+        function previousPage() { /* not used in continuous scroll */ }
+        function nextPage() { /* not used in continuous scroll */ }
+
+        function buildPdfUrl(fontSize) {
+            let url = '';
+            let params = new URLSearchParams();
+
+            if (currentPdfType === 'consolidated') {
+                url = '/api/seating/reports/consolidated/pdf';
+                params.append('date', currentPdfParams.date);
+            } else if (currentPdfType === 'room') {
+                url = '/api/seating/reports/room/pdf';
+                params.append('roomNo', currentPdfParams.roomNo);
+                params.append('date', currentPdfParams.date);
+            } else if (currentPdfType === 'all-rooms') {
+                url = '/api/seating/reports/all-rooms/pdf';
+                params.append('date', currentPdfParams.date);
+            }
+
+            params.append('fontSize', fontSize);
+
+            return url + '?' + params.toString();
+        }
+
+        function confirmDownload() {
+            let fontSize = $('#fontSizeInput').val() || 10;
+            let url = buildPdfUrl(fontSize);
+
+            // Create a temporary anchor element to trigger download
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            // Close modal
+            pdfModal.hide();
         }
     </script>
 </body>
