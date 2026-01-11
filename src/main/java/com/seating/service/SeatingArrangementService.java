@@ -5,6 +5,7 @@ import com.seating.entity.*;
 import com.seating.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +35,10 @@ public class SeatingArrangementService {
                 throw new IllegalArgumentException("Please select departments, classes, and subjects");
             }
 
-            List<Room> rooms = roomRepository.findAll();
+            List<Room> rooms = roomRepository.findAll(Sort.by(Sort.Direction.ASC, "id"));
+            // Sort rooms by room ID (numeric order)
+            //List<Room> sortedRooms = rooms.stream().sorted(Comparator.comparing(Room::getId)).collect(Collectors.toList());
+
             if (rooms.isEmpty()) {
                 throw new IllegalArgumentException("No rooms available. Please add rooms first.");
             }
