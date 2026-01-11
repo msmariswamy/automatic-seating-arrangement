@@ -701,7 +701,11 @@ public class SeatingArrangementService {
                 String seatFrom = deptArrangements.get(0).getSeat().getSeatNo();
                 String seatTo = deptArrangements.get(deptArrangements.size() - 1).getSeat().getSeatNo();
 
+                // Get room ID from the first arrangement (all have same room)
+                Long roomId = deptArrangements.get(0).getRoom().getId();
+
                 ConsolidatedReportDTO dto = ConsolidatedReportDTO.builder()
+                        .roomId(roomId)
                         .roomNo(roomNo)
                         .department(department)
                         .seatFrom(seatFrom)
@@ -713,7 +717,8 @@ public class SeatingArrangementService {
             }
         }
 
-        report.sort(Comparator.comparing(ConsolidatedReportDTO::getRoomNo)
+        // Sort by room ID (numeric order) instead of room number (string order)
+        report.sort(Comparator.comparing(ConsolidatedReportDTO::getRoomId)
                 .thenComparing(ConsolidatedReportDTO::getDepartment));
 
         return report;
@@ -765,7 +770,11 @@ public class SeatingArrangementService {
             middleSeats.sort(Comparator.comparing(SeatAllocationDTO::getBenchNo));
             leftSeats.sort(Comparator.comparing(SeatAllocationDTO::getBenchNo));
 
+            // Get room ID from the first arrangement (all have same room)
+            Long roomId = roomArrangements.get(0).getRoom().getId();
+
             RoomReportDTO report = RoomReportDTO.builder()
+                    .roomId(roomId)
                     .roomNo(roomNo)
                     .departments(departments)
                     .subjects(subjects)
@@ -777,7 +786,8 @@ public class SeatingArrangementService {
             reports.add(report);
         }
 
-        reports.sort(Comparator.comparing(RoomReportDTO::getRoomNo));
+        // Sort by room ID (numeric order) instead of room number (string order)
+        reports.sort(Comparator.comparing(RoomReportDTO::getRoomId));
         return reports;
     }
 
