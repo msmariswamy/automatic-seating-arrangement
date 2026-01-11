@@ -8,8 +8,8 @@ group = 'com.seating'
 version = '1.0.0'
 
 java {
-    sourceCompatibility = '21'
-    targetCompatibility = '21'
+    sourceCompatibility = '17'
+    targetCompatibility = '17'
 }
 
 configurations {
@@ -31,11 +31,13 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
     // PostgreSQL Driver
-    runtimeOnly 'org.postgresql:postgresql'
+    //runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly("com.h2database:h2")
 
     // Apache POI for Excel
     implementation 'org.apache.poi:poi:5.2.5'
     implementation 'org.apache.poi:poi-ooxml:5.2.5'
+
 
     // iText for PDF generation
     implementation 'com.itextpdf:itextpdf:5.5.13.3'
@@ -67,6 +69,6 @@ task runApp(type: JavaExec) {
     mainClass = 'com.seating.SeatingArrangementApplication'
 }
 
-bootRun {
-    jvmArgs=["-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=7001","-Xms512m", "-Xmx1048m"]
-}
+//bootRun {
+    //jvmArgs=["-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=7001","-Xms512m", "-Xmx1048m"]
+//}
