@@ -4,6 +4,7 @@ import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
 import com.seating.config.ReportConfig;
 import com.seating.dto.ConsolidatedReportDTO;
+import com.seating.dto.JuniorSupervisorReportDTO;
 import com.seating.dto.RoomReportDTO;
 import com.seating.dto.SeatAllocationDTO;
 import lombok.RequiredArgsConstructor;
@@ -237,6 +238,364 @@ public class PdfService {
         cell.setHorizontalAlignment(Element.ALIGN_CENTER);
         cell.setPadding(5);
         return cell;
+    }
+
+    public byte[] generateJuniorSupervisorReportPdf(JuniorSupervisorReportDTO report, LocalDate date,
+            String fontSize, boolean showAnswerSheetCol, boolean showSupplementsCol) throws DocumentException {
+        FontSizes fonts = getFontSizes(fontSize);
+        // Reduced margins to fit content on one page
+        Document document = new Document(PageSize.A4, 25, 25, 20, 20);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        try {
+            PdfWriter.getInstance(document, outputStream);
+            document.open();
+
+            // Header - College Name (reduced font sizes)
+            Font collegeBold = new Font(Font.FontFamily.HELVETICA, 11, Font.BOLD);
+            Paragraph line1 = new Paragraph("SHRI SIDH THAKURNATH COLLEGE OF ARTS & COMMERCE", collegeBold);
+            line1.setAlignment(Element.ALIGN_CENTER);
+            line1.setSpacingAfter(0);
+            document.add(line1);
+
+            Font collegeNormal = new Font(Font.FontFamily.HELVETICA, 9, Font.NORMAL);
+            Paragraph line2 = new Paragraph("(Affiliated to University of Mumbai, Mumbai)", collegeNormal);
+            line2.setAlignment(Element.ALIGN_CENTER);
+            line2.setSpacingAfter(0);
+            document.add(line2);
+
+            Paragraph line3 = new Paragraph("ULHASNAGAR - 421 004. Dist. Thane", collegeNormal);
+            line3.setAlignment(Element.ALIGN_CENTER);
+            line3.setSpacingAfter(3);
+            document.add(line3);
+
+            Font titleFont = new Font(Font.FontFamily.HELVETICA, 12, Font.BOLD | Font.UNDERLINE);
+            Paragraph title = new Paragraph("Junior Supervisor's Report", titleFont);
+            title.setAlignment(Element.ALIGN_CENTER);
+            title.setSpacingAfter(5);
+            document.add(title);
+
+            // Exam details section (reduced font sizes)
+            Font labelFont = new Font(Font.FontFamily.HELVETICA, 9, Font.BOLD);
+            Font valueFont = new Font(Font.FontFamily.HELVETICA, 9, Font.NORMAL);
+
+            // Department and Room No row
+            PdfPTable deptRoomTable = new PdfPTable(2);
+            deptRoomTable.setWidthPercentage(100);
+            deptRoomTable.setSpacingAfter(3);
+
+            PdfPCell deptCell = new PdfPCell();
+            deptCell.setBorder(Rectangle.NO_BORDER);
+            deptCell.addElement(createLabelValuePhrase("Department: ", report.getDepartment(), labelFont, valueFont));
+            deptRoomTable.addCell(deptCell);
+
+            PdfPCell roomCell = new PdfPCell();
+            roomCell.setBorder(Rectangle.NO_BORDER);
+            roomCell.addElement(createLabelValuePhrase("Room No: ", report.getRoomNo(), labelFont, valueFont));
+            deptRoomTable.addCell(roomCell);
+
+            document.add(deptRoomTable);
+
+            // Class, Subject, Date row
+            PdfPTable detailsTable = new PdfPTable(3);
+            detailsTable.setWidthPercentage(100);
+            detailsTable.setSpacingAfter(3);
+
+            PdfPCell classCell = new PdfPCell();
+            classCell.setBorder(Rectangle.NO_BORDER);
+            classCell.addElement(createLabelValuePhrase("Class: ", report.getClassName(), labelFont, valueFont));
+            detailsTable.addCell(classCell);
+
+            PdfPCell subjectCell = new PdfPCell();
+            subjectCell.setBorder(Rectangle.NO_BORDER);
+            subjectCell.addElement(createLabelValuePhrase("Subject: ", report.getSubject(), labelFont, valueFont));
+            detailsTable.addCell(subjectCell);
+
+            PdfPCell dateCell = new PdfPCell();
+            dateCell.setBorder(Rectangle.NO_BORDER);
+            dateCell.addElement(createLabelValuePhrase("Date: ", date.toString(), labelFont, valueFont));
+            detailsTable.addCell(dateCell);
+
+            document.add(detailsTable);
+
+            // Calculate seat number range
+            String seatNoRange = "_______";
+            if (!report.getStudents().isEmpty()) {
+                String firstSeatNo = report.getStudents().get(0).getRollNo();
+                String lastSeatNo = report.getStudents().get(report.getStudents().size() - 1).getRollNo();
+                seatNoRange = firstSeatNo + " to " + lastSeatNo;
+            }
+
+            // SEM, Total, Seat No row
+            PdfPTable semTable = new PdfPTable(3);
+            semTable.setWidthPercentage(100);
+            semTable.setSpacingAfter(3);
+
+            PdfPCell semCell = new PdfPCell();
+            semCell.setBorder(Rectangle.NO_BORDER);
+            semCell.addElement(createLabelValuePhrase("SEM: ", "_______", labelFont, valueFont));
+            semTable.addCell(semCell);
+
+            PdfPCell totalBlockCell = new PdfPCell();
+            totalBlockCell.setBorder(Rectangle.NO_BORDER);
+            totalBlockCell.addElement(createLabelValuePhrase("Total No. in the Block: ", String.valueOf(report.getTotalStudents()), labelFont, valueFont));
+            semTable.addCell(totalBlockCell);
+
+            PdfPCell seatNoCell = new PdfPCell();
+            seatNoCell.setBorder(Rectangle.NO_BORDER);
+            seatNoCell.addElement(createLabelValuePhrase("Seat No: ", seatNoRange, labelFont, valueFont));
+            semTable.addCell(seatNoCell);
+
+            document.add(semTable);
+
+            // Total Present/Absent row
+            PdfPTable presentAbsentTable = new PdfPTable(2);
+            presentAbsentTable.setWidthPercentage(100);
+            presentAbsentTable.setSpacingAfter(5);
+
+            PdfPCell presentCell = new PdfPCell();
+            presentCell.setBorder(Rectangle.NO_BORDER);
+            presentCell.addElement(createLabelValuePhrase("Total No. of Candidates Present: ", "_______", labelFont, valueFont));
+            presentAbsentTable.addCell(presentCell);
+
+            PdfPCell absentCell = new PdfPCell();
+            absentCell.setBorder(Rectangle.NO_BORDER);
+            absentCell.addElement(createLabelValuePhrase("Total No. of Candidates Absent: ", "_______", labelFont, valueFont));
+            presentAbsentTable.addCell(absentCell);
+
+            document.add(presentAbsentTable);
+
+            // Create the main table with two side-by-side tables (1-20 and 21-40)
+            int totalStudents = report.getStudents().size();
+
+            // Main container table with 2 columns (left table | right table)
+            PdfPTable mainTable = new PdfPTable(2);
+            mainTable.setWidthPercentage(100);
+            mainTable.setSpacingBefore(3);
+
+            // Left table (1-20)
+            PdfPTable leftTable = createStudentTable(fonts, showAnswerSheetCol, showSupplementsCol);
+            addStudentRows(leftTable, report.getStudents(), 0, Math.min(20, totalStudents), fonts, showAnswerSheetCol, showSupplementsCol);
+            // Fill remaining rows if less than 20
+            for (int i = totalStudents; i < 20; i++) {
+                addEmptyRow(leftTable, i + 1, showAnswerSheetCol, showSupplementsCol, fonts);
+            }
+
+            PdfPCell leftCell = new PdfPCell(leftTable);
+            leftCell.setBorder(Rectangle.NO_BORDER);
+            leftCell.setPaddingRight(3);
+            mainTable.addCell(leftCell);
+
+            // Right table (21-40)
+            PdfPTable rightTable = createStudentTable(fonts, showAnswerSheetCol, showSupplementsCol);
+            if (totalStudents > 20) {
+                addStudentRows(rightTable, report.getStudents(), 20, Math.min(40, totalStudents), fonts, showAnswerSheetCol, showSupplementsCol);
+            }
+            // Fill remaining rows up to 40
+            for (int i = Math.max(20, totalStudents); i < 40; i++) {
+                addEmptyRow(rightTable, i + 1, showAnswerSheetCol, showSupplementsCol, fonts);
+            }
+
+            PdfPCell rightCell = new PdfPCell(rightTable);
+            rightCell.setBorder(Rectangle.NO_BORDER);
+            rightCell.setPaddingLeft(3);
+            mainTable.addCell(rightCell);
+
+            document.add(mainTable);
+
+            // Footer section (reduced spacing)
+            Font footerFont = new Font(Font.FontFamily.HELVETICA, 9, Font.NORMAL);
+
+            Paragraph answerSheets = new Paragraph();
+            answerSheets.add(new Chunk("Total No. of Main Answer Sheets Used: ", labelFont));
+            answerSheets.add(new Chunk("_____________", footerFont));
+            answerSheets.setSpacingBefore(5);
+            document.add(answerSheets);
+
+            // Jr Supervisor row
+            PdfPTable jrSupTable = new PdfPTable(2);
+            jrSupTable.setWidthPercentage(100);
+            jrSupTable.setSpacingBefore(5);
+
+            PdfPCell jrNameCell = new PdfPCell();
+            jrNameCell.setBorder(Rectangle.NO_BORDER);
+            jrNameCell.addElement(createLabelValuePhrase("Name of Jr. Supervisor: ", "________________", labelFont, footerFont));
+            jrSupTable.addCell(jrNameCell);
+
+            PdfPCell jrSignCell = new PdfPCell();
+            jrSignCell.setBorder(Rectangle.NO_BORDER);
+            jrSignCell.addElement(createLabelValuePhrase("Signature: ", "________________", labelFont, footerFont));
+            jrSupTable.addCell(jrSignCell);
+
+            document.add(jrSupTable);
+
+            // Checked by row
+            PdfPTable checkedTable = new PdfPTable(2);
+            checkedTable.setWidthPercentage(100);
+            checkedTable.setSpacingBefore(5);
+
+            PdfPCell checkedNameCell = new PdfPCell();
+            checkedNameCell.setBorder(Rectangle.NO_BORDER);
+            checkedNameCell.addElement(createLabelValuePhrase("Checked by another Jr. Supervisor: ", "________________", labelFont, footerFont));
+            checkedTable.addCell(checkedNameCell);
+
+            PdfPCell checkedSignCell = new PdfPCell();
+            checkedSignCell.setBorder(Rectangle.NO_BORDER);
+            checkedSignCell.addElement(createLabelValuePhrase("Signature: ", "________________", labelFont, footerFont));
+            checkedTable.addCell(checkedSignCell);
+
+            document.add(checkedTable);
+
+            // Sr Supervisor row
+            PdfPTable srSupTable = new PdfPTable(2);
+            srSupTable.setWidthPercentage(100);
+            srSupTable.setSpacingBefore(5);
+
+            PdfPCell srNameCell = new PdfPCell();
+            srNameCell.setBorder(Rectangle.NO_BORDER);
+            srNameCell.addElement(createLabelValuePhrase("Name of Sr. Supervisor: ", "________________", labelFont, footerFont));
+            srSupTable.addCell(srNameCell);
+
+            PdfPCell srSignCell = new PdfPCell();
+            srSignCell.setBorder(Rectangle.NO_BORDER);
+            srSignCell.addElement(createLabelValuePhrase("Signature: ", "________________", labelFont, footerFont));
+            srSupTable.addCell(srSignCell);
+
+            document.add(srSupTable);
+
+            document.close();
+            log.info("Generated Junior Supervisor Report PDF for room {} subject {}", report.getRoomNo(), report.getSubject());
+
+            return outputStream.toByteArray();
+
+        } catch (Exception e) {
+            log.error("Error generating Junior Supervisor Report PDF: {}", e.getMessage(), e);
+            throw new DocumentException("Failed to generate Junior Supervisor Report PDF: " + e.getMessage());
+        }
+    }
+
+    private Phrase createLabelValuePhrase(String label, String value, Font labelFont, Font valueFont) {
+        Phrase phrase = new Phrase();
+        phrase.add(new Chunk(label, labelFont));
+        phrase.add(new Chunk(value, valueFont));
+        return phrase;
+    }
+
+    private PdfPTable createStudentTable(FontSizes fonts, boolean showAnswerSheetCol, boolean showSupplementsCol) throws DocumentException {
+        int columnCount = 3; // Sr No, Seat No, Signature
+        if (showAnswerSheetCol) columnCount++;
+        if (showSupplementsCol) columnCount++;
+
+        PdfPTable table = new PdfPTable(columnCount);
+        table.setWidthPercentage(100);
+
+        // Set column widths
+        float[] widths;
+        if (showAnswerSheetCol && showSupplementsCol) {
+            widths = new float[]{1f, 2f, 2f, 2.5f, 2.5f};
+        } else if (showAnswerSheetCol || showSupplementsCol) {
+            widths = new float[]{1f, 2f, 3f, 3f};
+        } else {
+            widths = new float[]{1f, 2.5f, 3.5f};
+        }
+        table.setWidths(widths);
+
+        Font headerFont = new Font(Font.FontFamily.HELVETICA, 8, Font.BOLD);
+
+        // Headers
+        table.addCell(createTableHeaderCell("Sr No", headerFont));
+        table.addCell(createTableHeaderCell("Seat No", headerFont));
+        if (showAnswerSheetCol) {
+            table.addCell(createTableHeaderCell("Main Answer Sheet No.", headerFont));
+        }
+        if (showSupplementsCol) {
+            table.addCell(createTableHeaderCell("No. of Suppl. & Stationery", headerFont));
+        }
+        table.addCell(createTableHeaderCell("Signature", headerFont));
+
+        return table;
+    }
+
+    private PdfPCell createTableHeaderCell(String text, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, font));
+        cell.setBackgroundColor(BaseColor.LIGHT_GRAY);
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        cell.setPadding(2);
+        return cell;
+    }
+
+    private void addStudentRows(PdfPTable table, List<JuniorSupervisorReportDTO.StudentEntry> students,
+            int start, int end, FontSizes fonts, boolean showAnswerSheetCol, boolean showSupplementsCol) {
+        Font cellFont = new Font(Font.FontFamily.HELVETICA, 8, Font.NORMAL);
+
+        for (int i = start; i < end; i++) {
+            JuniorSupervisorReportDTO.StudentEntry student = students.get(i);
+
+            table.addCell(createTableDataCell(String.valueOf(student.getSrNo()), cellFont));
+            table.addCell(createTableDataCell(student.getRollNo(), cellFont));
+            if (showAnswerSheetCol) {
+                table.addCell(createTableDataCell("", cellFont)); // Blank for answer sheet
+            }
+            if (showSupplementsCol) {
+                table.addCell(createTableDataCell("", cellFont)); // Blank for supplements
+            }
+            table.addCell(createTableDataCell("", cellFont)); // Blank for signature
+        }
+    }
+
+    private void addEmptyRow(PdfPTable table, int srNo, boolean showAnswerSheetCol, boolean showSupplementsCol, FontSizes fonts) {
+        Font cellFont = new Font(Font.FontFamily.HELVETICA, 8, Font.NORMAL);
+
+        table.addCell(createTableDataCell(String.valueOf(srNo), cellFont));
+        table.addCell(createTableDataCell("", cellFont));
+        if (showAnswerSheetCol) {
+            table.addCell(createTableDataCell("", cellFont));
+        }
+        if (showSupplementsCol) {
+            table.addCell(createTableDataCell("", cellFont));
+        }
+        table.addCell(createTableDataCell("", cellFont));
+    }
+
+    private PdfPCell createTableDataCell(String text, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, font));
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        cell.setPadding(2);
+        cell.setMinimumHeight(14);
+        return cell;
+    }
+
+    public byte[] generateAllJuniorSupervisorReportsPdf(List<JuniorSupervisorReportDTO> reports, LocalDate date,
+            String fontSize, boolean showAnswerSheetCol, boolean showSupplementsCol) throws DocumentException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        try {
+            Document document = new Document(PageSize.A4);
+            PdfCopy copy = new PdfCopy(document, outputStream);
+            document.open();
+
+            for (JuniorSupervisorReportDTO report : reports) {
+                byte[] reportPdf = generateJuniorSupervisorReportPdf(report, date, fontSize, showAnswerSheetCol, showSupplementsCol);
+                PdfReader reader = new PdfReader(reportPdf);
+
+                for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+                    copy.addPage(copy.getImportedPage(reader, i));
+                }
+
+                reader.close();
+            }
+
+            document.close();
+            log.info("Generated merged Junior Supervisor Reports PDF for {} reports on date {}", reports.size(), date);
+
+            return outputStream.toByteArray();
+
+        } catch (Exception e) {
+            log.error("Error generating merged Junior Supervisor Reports PDF: {}", e.getMessage(), e);
+            throw new DocumentException("Failed to generate merged Junior Supervisor Reports PDF: " + e.getMessage());
+        }
     }
 
     /**

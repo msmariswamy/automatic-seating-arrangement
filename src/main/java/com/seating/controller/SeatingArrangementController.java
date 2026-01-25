@@ -2,6 +2,7 @@ package com.seating.controller;
 
 import com.seating.config.ReportConfig;
 import com.seating.dto.ConsolidatedReportDTO;
+import com.seating.dto.JuniorSupervisorReportDTO;
 import com.seating.dto.RoomReportDTO;
 import com.seating.dto.SeatingFilterDTO;
 import com.seating.service.PdfService;
@@ -168,6 +169,73 @@ public class SeatingArrangementController {
             return ResponseEntity.ok(dates);
         } catch (Exception e) {
             log.error("Error fetching arrangement dates: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/junior-supervisor")
+    @ResponseBody
+    public ResponseEntity<List<JuniorSupervisorReportDTO>> getJuniorSupervisorReports(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        try {
+            List<JuniorSupervisorReportDTO> reports = seatingService.getJuniorSupervisorReports(date);
+            return ResponseEntity.ok(reports);
+        } catch (Exception e) {
+            log.error("Error fetching junior supervisor reports: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/junior-supervisor/pdf")
+    @ResponseBody
+    public ResponseEntity<byte[]> downloadJuniorSupervisorPdf(
+            @RequestParam String roomNo,
+            @RequestParam String subject,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "10") String fontSize,
+            @RequestParam(defaultValue = "true") boolean showAnswerSheetCol,
+            @RequestParam(defaultValue = "true") boolean showSupplementsCol) {
+        try {
+            List<JuniorSupervisorReportDTO> reports = seatingService.getJuniorSupervisorReports(date);
+            JuniorSupervisorReportDTO report = reports.stream()
+                    .filter(r -> r.getRoomNo().equals(roomNo) && r.getSubject().equals(subject))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Report not found for room " + roomNo + " and subject " + subject));
+
+            byte[] pdfData = pdfService.generateJuniorSupervisorReportPdf(report, date, fontSize, showAnswerSheetCol, showSupplementsCol);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            String filename = "jr_supervisor_" + roomNo + "_" + subject.replaceAll("[^a-zA-Z0-9]", "_") + ".pdf";
+            headers.setContentDispositionFormData("attachment", filename);
+
+            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Error generating Junior Supervisor PDF: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/junior-supervisor/all/pdf")
+    @ResponseBody
+    public ResponseEntity<byte[]> downloadAllJuniorSupervisorPdfs(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "10") String fontSize,
+            @RequestParam(defaultValue = "true") boolean showAnswerSheetCol,
+            @RequestParam(defaultValue = "true") boolean showSupplementsCol) {
+        try {
+            List<JuniorSupervisorReportDTO> reports = seatingService.getJuniorSupervisorReports(date);
+            byte[] pdfData = pdfService.generateAllJuniorSupervisorReportsPdf(reports, date, fontSize, showAnswerSheetCol, showSupplementsCol);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", "all_junior_supervisor_reports_" + date + ".pdf");
+
+            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Error generating all Junior Supervisor PDFs: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

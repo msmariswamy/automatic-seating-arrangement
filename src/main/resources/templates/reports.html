@@ -132,6 +132,12 @@
                     <i class="fas fa-door-open"></i> Individual Room Reports
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="junior-supervisor-tab" data-bs-toggle="tab"
+                        data-bs-target="#juniorSupervisor" type="button" role="tab">
+                    <i class="fas fa-clipboard-list"></i> Junior Supervisor Reports
+                </button>
+            </li>
         </ul>
 
         <!-- Tab Content -->
@@ -179,6 +185,40 @@
                     </button>
                 </div>
                 <div id="roomReports"></div>
+            </div>
+
+            <!-- Junior Supervisor Reports -->
+            <div class="tab-pane fade" id="juniorSupervisor" role="tabpanel">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <i class="fas fa-cog"></i> Junior Supervisor Report Settings
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="showAnswerSheetCol" checked>
+                                    <label class="form-check-label" for="showAnswerSheetCol">
+                                        Show Main Answer Sheet No. Column
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="showSupplementsCol" checked>
+                                    <label class="form-check-label" for="showSupplementsCol">
+                                        Show No. of Supplements & Stationery Column
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3" id="juniorSupervisorHeader" style="display:none;">
+                    <h5 class="mb-0">Junior Supervisor Reports (Subject-wise, Room-wise)</h5>
+                    <button class="btn btn-primary" onclick="downloadAllJuniorSupervisorPdfs()">
+                        <i class="fas fa-file-pdf"></i> Download All PDFs (Merged)
+                    </button>
+                </div>
+                <div id="juniorSupervisorReports"></div>
             </div>
         </div>
     </div>
@@ -286,6 +326,7 @@
             $('#reportTabs').show();
             loadConsolidatedReport(date);
             loadRoomReports(date);
+            loadJuniorSupervisorReports(date);
         }
 
         function loadConsolidatedReport(date) {
@@ -381,6 +422,101 @@
                 $('#roomReports').html(html);
                 $('#roomReportsHeader').show();
             });
+        }
+
+        function loadJuniorSupervisorReports(date) {
+            $.get(`/api/seating/reports/junior-supervisor?date=${date}`, function(reports) {
+                let html = '';
+                // Group by room
+                let groupedByRoom = {};
+                reports.forEach(report => {
+                    if (!groupedByRoom[report.roomNo]) {
+                        groupedByRoom[report.roomNo] = [];
+                    }
+                    groupedByRoom[report.roomNo].push(report);
+                });
+
+                for (let roomNo in groupedByRoom) {
+                    let roomReports = groupedByRoom[roomNo];
+                    html += `
+                        <div class="room-card">
+                            <h4 class="mb-3">Room: ${roomNo}</h4>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Subject</th>
+                                            <th>Department</th>
+                                            <th>Class</th>
+                                            <th>Total Students</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                    `;
+
+                    roomReports.forEach(report => {
+                        let escapedSubject = report.subject.replace(/'/g, "\\'");
+                        html += `
+                            <tr>
+                                <td>${report.subject}</td>
+                                <td>${report.department}</td>
+                                <td>${report.className}</td>
+                                <td><strong>${report.totalStudents}</strong></td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary" onclick="downloadJuniorSupervisorPdf('${roomNo}', '${escapedSubject}', '${date}')">
+                                        <i class="fas fa-file-pdf"></i> Download PDF
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                $('#juniorSupervisorReports').html(html);
+                $('#juniorSupervisorHeader').show();
+            });
+        }
+
+        function downloadJuniorSupervisorPdf(roomNo, subject, date) {
+            let showAnswerSheetCol = $('#showAnswerSheetCol').is(':checked');
+            let showSupplementsCol = $('#showSupplementsCol').is(':checked');
+
+            let url = `/api/seating/reports/junior-supervisor/pdf?roomNo=${encodeURIComponent(roomNo)}&subject=${encodeURIComponent(subject)}&date=${date}&fontSize=10&showAnswerSheetCol=${showAnswerSheetCol}&showSupplementsCol=${showSupplementsCol}`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function downloadAllJuniorSupervisorPdfs() {
+            let date = $('#arrangementDate').val();
+            if (!date) {
+                alert('Please select a date first');
+                return;
+            }
+
+            let showAnswerSheetCol = $('#showAnswerSheetCol').is(':checked');
+            let showSupplementsCol = $('#showSupplementsCol').is(':checked');
+
+            let url = `/api/seating/reports/junior-supervisor/all/pdf?date=${date}&fontSize=10&showAnswerSheetCol=${showAnswerSheetCol}&showSupplementsCol=${showSupplementsCol}`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
 
         function generateSeatRows(seats) {

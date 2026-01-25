@@ -818,6 +818,65 @@ public class SeatingArrangementService {
         return arrangementRepository.findAllArrangementDates();
     }
 
+    @Transactional(readOnly = true)
+    public List<JuniorSupervisorReportDTO> getJuniorSupervisorReports(LocalDate date) {
+        List<SeatingArrangement> arrangements = arrangementRepository.findByArrangementDateOrdered(date);
+
+        // Group by room -> subject
+        Map<String, Map<String, List<SeatingArrangement>>> groupedData = arrangements.stream()
+                .collect(Collectors.groupingBy(
+                        a -> a.getRoom().getRoomNo(),
+                        Collectors.groupingBy(SeatingArrangement::getSubject)
+                ));
+
+        List<JuniorSupervisorReportDTO> reports = new ArrayList<>();
+
+        for (Map.Entry<String, Map<String, List<SeatingArrangement>>> roomEntry : groupedData.entrySet()) {
+            String roomNo = roomEntry.getKey();
+
+            for (Map.Entry<String, List<SeatingArrangement>> subjectEntry : roomEntry.getValue().entrySet()) {
+                String subject = subjectEntry.getKey();
+                List<SeatingArrangement> subjectArrangements = subjectEntry.getValue();
+
+                // Sort by seat number for serial number assignment
+                subjectArrangements.sort(Comparator.comparing(a -> a.getSeat().getSeatNo()));
+
+                // Get department and class from first student (all should have same subject)
+                String department = subjectArrangements.get(0).getStudent().getDepartment();
+                String className = subjectArrangements.get(0).getStudent().getClassName();
+                Long roomId = subjectArrangements.get(0).getRoom().getId();
+
+                List<JuniorSupervisorReportDTO.StudentEntry> students = new ArrayList<>();
+                int srNo = 1;
+                for (SeatingArrangement arr : subjectArrangements) {
+                    students.add(JuniorSupervisorReportDTO.StudentEntry.builder()
+                            .srNo(srNo++)
+                            .seatNo(arr.getSeat().getSeatNo())
+                            .rollNo(arr.getStudent().getRollNo())
+                            .build());
+                }
+
+                JuniorSupervisorReportDTO dto = JuniorSupervisorReportDTO.builder()
+                        .roomId(roomId)
+                        .roomNo(roomNo)
+                        .department(department)
+                        .className(className)
+                        .subject(subject)
+                        .totalStudents(students.size())
+                        .students(students)
+                        .build();
+
+                reports.add(dto);
+            }
+        }
+
+        // Sort by room ID, then by subject
+        reports.sort(Comparator.comparing(JuniorSupervisorReportDTO::getRoomId)
+                .thenComparing(JuniorSupervisorReportDTO::getSubject));
+
+        return reports;
+    }
+
     @Transactional
     public void deleteArrangement(LocalDate date) {
         arrangementRepository.deleteByArrangementDate(date);
