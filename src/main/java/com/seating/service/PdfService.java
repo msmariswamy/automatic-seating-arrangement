@@ -562,8 +562,8 @@ public class PdfService {
         PdfPCell cell = new PdfPCell(new Phrase(text, font));
         cell.setHorizontalAlignment(Element.ALIGN_CENTER);
         cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
-        cell.setPadding(2);
-        cell.setMinimumHeight(14);
+        cell.setPadding(3);
+        cell.setMinimumHeight(21);
         return cell;
     }
 
