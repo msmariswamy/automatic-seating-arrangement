@@ -696,10 +696,11 @@ public class SeatingArrangementService {
                 String department = deptEntry.getKey();
                 List<SeatingArrangement> deptArrangements = deptEntry.getValue();
 
-                deptArrangements.sort(Comparator.comparing(a -> a.getSeat().getBenchNo()));
+                // Sort by roll number to get first and last roll numbers
+                deptArrangements.sort(Comparator.comparing(a -> a.getStudent().getRollNo()));
 
-                String seatFrom = deptArrangements.get(0).getSeat().getSeatNo();
-                String seatTo = deptArrangements.get(deptArrangements.size() - 1).getSeat().getSeatNo();
+                String rollNoFrom = deptArrangements.get(0).getStudent().getRollNo();
+                String rollNoTo = deptArrangements.get(deptArrangements.size() - 1).getStudent().getRollNo();
 
                 // Get room ID from the first arrangement (all have same room)
                 Long roomId = deptArrangements.get(0).getRoom().getId();
@@ -708,8 +709,8 @@ public class SeatingArrangementService {
                         .roomId(roomId)
                         .roomNo(roomNo)
                         .department(department)
-                        .seatFrom(seatFrom)
-                        .seatTo(seatTo)
+                        .rollNoFrom(rollNoFrom)
+                        .rollNoTo(rollNoTo)
                         .totalCount(deptArrangements.size())
                         .build();
 
