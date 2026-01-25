@@ -85,11 +85,12 @@ public class SeatingArrangementService {
     /**
      * NEW ALLOCATION STRATEGY - ROOM-BY-ROOM POSITION-BY-POSITION WITH 2-SUBJECT-PER-BENCH
      * Rules:
-     * 1) L and R have different subjects (R ≠ L)
+     * 1) L and R have different subjects (R ≠ L) - unless no other subjects available
      * 2) M is continuation of either L or R (M = R's subject OR M = L's subject)
      * 3) Sequence is maintained (rooms in ID order, seats in bench order)
      * 4) R, M, L of the room completed before moving to next room
      * 5) Subject sequence continues from one room to the next
+     * 6) If one series (R or L) exhausts and no other subjects available, continue with the opposite series' subject
      *
      * Process:
      * - Room 1: All R seats → All M seats → All L seats
@@ -239,6 +240,16 @@ public class SeatingArrangementService {
                             break;
                         }
                     }
+                    // If no other subjects available, use L's subject as fallback
+                    if (!found) {
+                        rStudent = findNextUnallocatedStudent(studentsBySubject.get(lCurrentSubject));
+                        if (rStudent != null) {
+                            rSubjectIndex = lSubjectIndex;
+                            rCurrentSubject = lCurrentSubject;
+                            log.info("  R-position: No other subjects available, continuing with L's subject {}", rCurrentSubject);
+                            found = true;
+                        }
+                    }
                     if (!found) {
                         log.warn("  No more students available for R position");
                         break;
@@ -373,6 +384,16 @@ public class SeatingArrangementService {
                             log.info("  L-position: Switched to subject {}", lCurrentSubject);
                             found = true;
                             break;
+                        }
+                    }
+                    // If no other subjects available, use R's subject as fallback
+                    if (!found) {
+                        lStudent = findNextUnallocatedStudent(studentsBySubject.get(rCurrentSubject));
+                        if (lStudent != null) {
+                            lSubjectIndex = rSubjectIndex;
+                            lCurrentSubject = rCurrentSubject;
+                            log.info("  L-position: No other subjects available, continuing with R's subject {}", lCurrentSubject);
+                            found = true;
                         }
                     }
                     if (!found) {
