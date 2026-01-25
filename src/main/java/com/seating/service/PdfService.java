@@ -500,7 +500,7 @@ public class PdfService {
         }
         table.setWidths(widths);
 
-        Font headerFont = new Font(Font.FontFamily.HELVETICA, 8, Font.BOLD);
+        Font headerFont = new Font(Font.FontFamily.HELVETICA, 10, Font.BOLD);
 
         // Headers
         table.addCell(createTableHeaderCell("Sr No", headerFont));
@@ -527,7 +527,7 @@ public class PdfService {
 
     private void addStudentRows(PdfPTable table, List<JuniorSupervisorReportDTO.StudentEntry> students,
             int start, int end, FontSizes fonts, boolean showAnswerSheetCol, boolean showSupplementsCol) {
-        Font cellFont = new Font(Font.FontFamily.HELVETICA, 8, Font.NORMAL);
+        Font cellFont = new Font(Font.FontFamily.HELVETICA, 10, Font.NORMAL);
 
         for (int i = start; i < end; i++) {
             JuniorSupervisorReportDTO.StudentEntry student = students.get(i);
@@ -545,7 +545,7 @@ public class PdfService {
     }
 
     private void addEmptyRow(PdfPTable table, int srNo, boolean showAnswerSheetCol, boolean showSupplementsCol, FontSizes fonts) {
-        Font cellFont = new Font(Font.FontFamily.HELVETICA, 8, Font.NORMAL);
+        Font cellFont = new Font(Font.FontFamily.HELVETICA, 10, Font.NORMAL);
 
         table.addCell(createTableDataCell(String.valueOf(srNo), cellFont));
         table.addCell(createTableDataCell("", cellFont));
