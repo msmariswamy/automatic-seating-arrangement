@@ -163,16 +163,16 @@ public class PdfService {
             // Add headers
             table.addCell(createHeaderCell("Room No", fonts));
             table.addCell(createHeaderCell("Department", fonts));
-            table.addCell(createHeaderCell("Seat From", fonts));
-            table.addCell(createHeaderCell("Seat To", fonts));
+            table.addCell(createHeaderCell("Roll No From", fonts));
+            table.addCell(createHeaderCell("Roll No To", fonts));
             table.addCell(createHeaderCell("Total Count", fonts));
 
             // Add data rows
             for (ConsolidatedReportDTO row : report) {
                 table.addCell(createDataCell(row.getRoomNo(), fonts));
                 table.addCell(createDataCell(row.getDepartment(), fonts));
-                table.addCell(createDataCell(row.getSeatFrom(), fonts));
-                table.addCell(createDataCell(row.getSeatTo(), fonts));
+                table.addCell(createDataCell(row.getRollNoFrom(), fonts));
+                table.addCell(createDataCell(row.getRollNoTo(), fonts));
                 table.addCell(createDataCell(String.valueOf(row.getTotalCount()), fonts));
             }
 

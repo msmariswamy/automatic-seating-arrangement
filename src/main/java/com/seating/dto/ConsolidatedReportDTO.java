@@ -13,7 +13,7 @@ public class ConsolidatedReportDTO {
     private Long roomId;
     private String roomNo;
     private String department;
-    private String seatFrom;
-    private String seatTo;
+    private String rollNoFrom;
+    private String rollNoTo;
     private Integer totalCount;
 }
