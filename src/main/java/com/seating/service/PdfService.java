@@ -313,7 +313,7 @@ public class PdfService {
 
             PdfPCell dateCell = new PdfPCell();
             dateCell.setBorder(Rectangle.NO_BORDER);
-            dateCell.addElement(createLabelValuePhrase("Date: ", date.toString(), labelFont, valueFont));
+            dateCell.addElement(createLabelValuePhrase("Date: ", "____________", labelFont, valueFont));
             detailsTable.addCell(dateCell);
 
             document.add(detailsTable);
