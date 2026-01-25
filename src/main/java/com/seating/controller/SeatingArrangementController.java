@@ -189,4 +189,21 @@ public class SeatingArrangementController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
+
+    @DeleteMapping("/all")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> deleteAllArrangements() {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            seatingService.deleteAllArrangements();
+            response.put("success", true);
+            response.put("message", "All seating arrangements deleted successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error deleting all arrangements: {}", e.getMessage(), e);
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
 }

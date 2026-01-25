@@ -824,4 +824,11 @@ public class SeatingArrangementService {
         resetPreviousArrangement();
         log.info("Deleted arrangement for date: {}", date);
     }
+
+    @Transactional
+    public void deleteAllArrangements() {
+        arrangementRepository.deleteAll();
+        resetPreviousArrangement();
+        log.info("Deleted all seating arrangements");
+    }
 }

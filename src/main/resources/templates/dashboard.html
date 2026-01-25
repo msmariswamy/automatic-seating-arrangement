@@ -236,6 +236,12 @@
                             <i class="fas fa-magic"></i> Generate Seating Arrangement
                         </button>
                     </div>
+                    <hr>
+                    <div class="text-center">
+                        <button onclick="deleteSeatingArrangements()" class="btn btn-danger btn-sm">
+                            <i class="fas fa-trash"></i> Clear All Seating Arrangements
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -438,6 +444,21 @@
                     success: function(response) {
                         alert(response.message);
                         loadStatistics();
+                    },
+                    error: function(xhr) {
+                        alert('Error: ' + (xhr.responseJSON?.message || 'Delete failed'));
+                    }
+                });
+            }
+        }
+
+        function deleteSeatingArrangements() {
+            if (confirm('Are you sure you want to delete all seating arrangements?')) {
+                $.ajax({
+                    url: '/api/seating/all',
+                    type: 'DELETE',
+                    success: function(response) {
+                        alert(response.message);
                     },
                     error: function(xhr) {
                         alert('Error: ' + (xhr.responseJSON?.message || 'Delete failed'));
