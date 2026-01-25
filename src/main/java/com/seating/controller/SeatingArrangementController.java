@@ -1,5 +1,6 @@
 package com.seating.controller;
 
+import com.seating.config.ReportConfig;
 import com.seating.dto.ConsolidatedReportDTO;
 import com.seating.dto.RoomReportDTO;
 import com.seating.dto.SeatingFilterDTO;
@@ -32,6 +33,7 @@ public class SeatingArrangementController {
 
     private final SeatingArrangementService seatingService;
     private final PdfService pdfService;
+    private final ReportConfig reportConfig;
 
     @PostMapping("/generate")
     @ResponseBody
@@ -57,6 +59,8 @@ public class SeatingArrangementController {
     public String showReportsPage(Model model) {
         List<LocalDate> dates = seatingService.getAllArrangementDates();
         model.addAttribute("dates", dates);
+        model.addAttribute("reportHeaderLine1", reportConfig.getLine1());
+        model.addAttribute("reportHeaderLine2", reportConfig.getLine2());
         return "reports";
     }
 

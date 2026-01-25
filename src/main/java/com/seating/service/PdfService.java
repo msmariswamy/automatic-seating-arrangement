@@ -2,9 +2,11 @@ package com.seating.service;
 
 import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
+import com.seating.config.ReportConfig;
 import com.seating.dto.ConsolidatedReportDTO;
 import com.seating.dto.RoomReportDTO;
 import com.seating.dto.SeatAllocationDTO;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +20,10 @@ import java.util.List;
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class PdfService {
+
+    private final ReportConfig reportConfig;
 
     public byte[] generateRoomReportPdf(RoomReportDTO report, LocalDate date, String fontSize) throws DocumentException {
         FontSizes fonts = getFontSizes(fontSize);
@@ -29,7 +34,10 @@ public class PdfService {
             PdfWriter.getInstance(document, outputStream);
             document.open();
 
-            Paragraph title = new Paragraph("Seating Arrangement Report", fonts.titleFont);
+            // Add college header
+            addCollegeHeader(document, fonts);
+
+            Paragraph title = new Paragraph("Individual Room Report", fonts.titleFont);
             title.setAlignment(Element.ALIGN_CENTER);
             document.add(title);
 
@@ -145,7 +153,10 @@ public class PdfService {
             PdfWriter.getInstance(document, outputStream);
             document.open();
 
-            Paragraph title = new Paragraph("Consolidated Seating Arrangement Report", fonts.titleFont);
+            // Add college header
+            addCollegeHeader(document, fonts);
+
+            Paragraph title = new Paragraph("Consolidated Report", fonts.titleFont);
             title.setAlignment(Element.ALIGN_CENTER);
             document.add(title);
 
@@ -228,6 +239,25 @@ public class PdfService {
         return cell;
     }
 
+    /**
+     * Adds the college header to the PDF document
+     */
+    private void addCollegeHeader(Document document, FontSizes fonts) throws DocumentException {
+        if (reportConfig.getLine1() != null && !reportConfig.getLine1().isEmpty()) {
+            Paragraph headerLine1 = new Paragraph(reportConfig.getLine1(), fonts.collegeBoldFont);
+            headerLine1.setAlignment(Element.ALIGN_CENTER);
+            document.add(headerLine1);
+        }
+
+        if (reportConfig.getLine2() != null && !reportConfig.getLine2().isEmpty()) {
+            Paragraph headerLine2 = new Paragraph(reportConfig.getLine2(), fonts.collegeBoldFont);
+            headerLine2.setAlignment(Element.ALIGN_CENTER);
+            document.add(headerLine2);
+        }
+
+        document.add(new Paragraph(" "));
+    }
+
     private FontSizes getFontSizes(String fontSize) {
         // Try to parse as integer (numeric font size)
         try {
@@ -255,12 +285,15 @@ public class PdfService {
         final Font headerFont;
         final Font normalFont;
         final Font smallFont;
+        final Font collegeBoldFont;
 
         FontSizes(int titleSize, int headerSize, int normalSize, int smallSize) {
             this.titleFont = new Font(Font.FontFamily.HELVETICA, titleSize, Font.BOLD);
             this.headerFont = new Font(Font.FontFamily.HELVETICA, headerSize, Font.BOLD);
             this.normalFont = new Font(Font.FontFamily.HELVETICA, normalSize, Font.NORMAL);
             this.smallFont = new Font(Font.FontFamily.HELVETICA, smallSize, Font.NORMAL);
+            // College header uses a slightly larger bold font
+            this.collegeBoldFont = new Font(Font.FontFamily.HELVETICA, headerSize, Font.BOLD);
         }
     }
 }

@@ -146,6 +146,12 @@
                         </button>
                     </div>
                     <div class="card-body">
+                        <!-- College Header -->
+                        <div class="text-center mb-3" id="consolidatedHeader" style="display:none;">
+                            <h5 class="mb-0" style="font-weight: bold;" th:text="${reportHeaderLine1}"></h5>
+                            <h6 style="font-weight: bold;" th:text="${reportHeaderLine2}"></h6>
+                            <h5 class="mt-2"><strong>Consolidated Report</strong></h5>
+                        </div>
                         <div class="table-responsive">
                             <table class="table table-striped table-hover" id="consolidatedTable">
                                 <thead>
@@ -234,9 +240,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>
+    <script th:inline="javascript">
         // Configure PDF.js worker
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Report header configuration from server
+        const reportHeaderLine1 = /*[[${reportHeaderLine1}]]*/ '';
+        const reportHeaderLine2 = /*[[${reportHeaderLine2}]]*/ '';
 
         let currentPdfType = null; // 'consolidated', 'room', 'all-rooms'
         let currentPdfParams = {};
@@ -291,6 +301,7 @@
                     </tr>`;
                 });
                 $('#consolidatedTable tbody').html(tbody);
+                $('#consolidatedHeader').show();
                 $('#downloadConsolidatedBtn').show();
             });
         }
@@ -301,6 +312,12 @@
                 reports.forEach(room => {
                     html += `
                         <div class="room-card">
+                            <!-- College Header -->
+                            <div class="text-center mb-3">
+                                <h5 class="mb-0" style="font-weight: bold;">${reportHeaderLine1}</h5>
+                                <h6 style="font-weight: bold;">${reportHeaderLine2}</h6>
+                                <h5 class="mt-2"><strong>Individual Room Report</strong></h5>
+                            </div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div>
                                     <h4>Room: ${room.roomNo}</h4>
