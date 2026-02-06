@@ -4,7 +4,6 @@ import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
 import com.seating.config.ReportConfig;
 import com.seating.dto.ConsolidatedReportDTO;
-import com.seating.dto.ConsolidatedRoomReportDTO;
 import com.seating.dto.JuniorSupervisorReportDTO;
 import com.seating.dto.MarksheetReportDTO;
 import com.seating.dto.RoomReportDTO;
@@ -200,89 +199,6 @@ public class PdfService {
         } catch (Exception e) {
             log.error("Error generating consolidated PDF: {}", e.getMessage(), e);
             throw new DocumentException("Failed to generate consolidated PDF: " + e.getMessage());
-        }
-    }
-
-    public byte[] generateConsolidatedRoomReportPdf(List<ConsolidatedRoomReportDTO> report, LocalDate date, String fontSize, boolean showFromTo) throws DocumentException {
-        FontSizes fonts = getFontSizes(fontSize);
-        Document document = new Document(PageSize.A4, 36, 36, 36, 36);
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-
-        try {
-            PdfWriter.getInstance(document, outputStream);
-            document.open();
-
-            // Add college header
-            addCollegeHeader(document, fonts);
-
-            Paragraph title = new Paragraph("Consolidated Room Report", fonts.titleFont);
-            title.setAlignment(Element.ALIGN_CENTER);
-            document.add(title);
-
-            document.add(new Paragraph(" "));
-
-            Paragraph dateInfo = new Paragraph("Date: " + date, fonts.normalFont);
-            document.add(dateInfo);
-
-            document.add(new Paragraph(" "));
-
-            // Determine column count based on showFromTo setting
-            int columnCount = showFromTo ? 6 : 5; // 6: Dept, Class, Room, From, To, Count; 5: Dept, Class, Room, All Seats, Count
-            PdfPTable table = new PdfPTable(columnCount);
-            table.setWidthPercentage(100);
-
-            if (showFromTo) {
-                table.setWidths(new float[]{2.5f, 2f, 1.5f, 3f, 2f, 1.2f});
-                // Add headers
-                table.addCell(createHeaderCell("Department", fonts));
-                table.addCell(createHeaderCell("Class", fonts));
-                table.addCell(createHeaderCell("Room No", fonts));
-                table.addCell(createHeaderCell("From Seat No", fonts));
-                table.addCell(createHeaderCell("To Seat No", fonts));
-                table.addCell(createHeaderCell("Total Count", fonts));
-            } else {
-                table.setWidths(new float[]{2.5f, 2f, 1.5f, 5f, 1.2f});
-                // Add headers
-                table.addCell(createHeaderCell("Department", fonts));
-                table.addCell(createHeaderCell("Class", fonts));
-                table.addCell(createHeaderCell("Room No", fonts));
-                table.addCell(createHeaderCell("All Seat Numbers", fonts));
-                table.addCell(createHeaderCell("Total Count", fonts));
-            }
-
-            // Add data rows with department merging
-            String lastDept = "";
-            for (ConsolidatedRoomReportDTO row : report) {
-                // Merge department cell if same as previous
-                PdfPCell deptCell = createDataCell(row.getDepartment(), fonts);
-                if (row.getDepartment().equals(lastDept)) {
-                    deptCell.setPhrase(new Phrase("", fonts.normalFont));
-                }
-                table.addCell(deptCell);
-                lastDept = row.getDepartment();
-
-                table.addCell(createDataCell(row.getClassName(), fonts));
-                table.addCell(createDataCell(row.getRoomNo(), fonts));
-
-                if (showFromTo) {
-                    table.addCell(createDataCell(String.join(", ", row.getFromSeatNumbers()), fonts));
-                    table.addCell(createDataCell(row.getToSeatNumber(), fonts));
-                } else {
-                    table.addCell(createDataCell(String.join(", ", row.getAllSeatNumbers()), fonts));
-                }
-                table.addCell(createDataCell(String.valueOf(row.getTotalCount()), fonts));
-            }
-
-            document.add(table);
-
-            document.close();
-            log.info("Generated consolidated room PDF report for date {}", date);
-
-            return outputStream.toByteArray();
-
-        } catch (Exception e) {
-            log.error("Error generating consolidated room PDF: {}", e.getMessage(), e);
-            throw new DocumentException("Failed to generate consolidated room PDF: " + e.getMessage());
         }
     }
 
