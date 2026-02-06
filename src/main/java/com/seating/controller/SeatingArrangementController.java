@@ -2,6 +2,7 @@ package com.seating.controller;
 
 import com.seating.config.ReportConfig;
 import com.seating.dto.ConsolidatedReportDTO;
+import com.seating.dto.DepartmentConsolidatedReportDTO;
 import com.seating.dto.JuniorSupervisorReportDTO;
 import com.seating.dto.MarksheetReportDTO;
 import com.seating.dto.RoomReportDTO;
@@ -88,6 +89,19 @@ public class SeatingArrangementController {
             return ResponseEntity.ok(reports);
         } catch (Exception e) {
             log.error("Error fetching room reports: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/department-consolidated")
+    @ResponseBody
+    public ResponseEntity<List<DepartmentConsolidatedReportDTO>> getDepartmentConsolidatedReport(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        try {
+            List<DepartmentConsolidatedReportDTO> report = seatingService.getDepartmentConsolidatedReport(date);
+            return ResponseEntity.ok(report);
+        } catch (Exception e) {
+            log.error("Error fetching department consolidated report: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

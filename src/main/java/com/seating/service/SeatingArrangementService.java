@@ -746,6 +746,73 @@ public class SeatingArrangementService {
         return report;
     }
 
+    /**
+     * Get department-consolidated report grouped by department, class, and room.
+     * Shows only first and last seat numbers.
+     */
+    @Transactional(readOnly = true)
+    public List<DepartmentConsolidatedReportDTO> getDepartmentConsolidatedReport(LocalDate date) {
+        List<SeatingArrangement> arrangements = arrangementRepository.findByArrangementDateOrdered(date);
+
+        // Group by department -> class -> room
+        Map<String, Map<String, Map<String, List<SeatingArrangement>>>> groupedData = arrangements.stream()
+                .collect(Collectors.groupingBy(
+                        a -> a.getStudent().getDepartment(),
+                        Collectors.groupingBy(
+                                a -> a.getStudent().getClassName(),
+                                Collectors.groupingBy(a -> a.getRoom().getRoomNo())
+                        )
+                ));
+
+        List<DepartmentConsolidatedReportDTO> report = new ArrayList<>();
+
+        for (Map.Entry<String, Map<String, Map<String, List<SeatingArrangement>>>> deptEntry : groupedData.entrySet()) {
+            String department = deptEntry.getKey();
+
+            for (Map.Entry<String, Map<String, List<SeatingArrangement>>> classEntry : deptEntry.getValue().entrySet()) {
+                String className = classEntry.getKey();
+
+                for (Map.Entry<String, List<SeatingArrangement>> roomEntry : classEntry.getValue().entrySet()) {
+                    String roomNo = roomEntry.getKey();
+                    List<SeatingArrangement> roomArrangements = roomEntry.getValue();
+
+                    // Get room ID from first arrangement
+                    Long roomId = roomArrangements.get(0).getRoom().getId();
+
+                    // Collect and sort all roll numbers
+                    List<String> seatNumbers = roomArrangements.stream()
+                            .map(a -> a.getStudent().getRollNo())
+                            .sorted()
+                            .collect(Collectors.toList());
+
+                    // First seat is the first in sorted order
+                    String fromSeat = seatNumbers.isEmpty() ? "" : seatNumbers.get(0);
+                    // Last seat is the last in sorted order
+                    String toSeat = seatNumbers.isEmpty() ? "" : seatNumbers.get(seatNumbers.size() - 1);
+
+                    DepartmentConsolidatedReportDTO dto = DepartmentConsolidatedReportDTO.builder()
+                            .department(department)
+                            .className(className)
+                            .roomId(roomId)
+                            .roomNo(roomNo)
+                            .fromSeat(fromSeat)
+                            .toSeat(toSeat)
+                            .totalCount(seatNumbers.size())
+                            .build();
+
+                    report.add(dto);
+                }
+            }
+        }
+
+        // Sort by department, then class, then room ID (numeric order)
+        report.sort(Comparator.comparing(DepartmentConsolidatedReportDTO::getDepartment)
+                .thenComparing(DepartmentConsolidatedReportDTO::getClassName)
+                .thenComparing(DepartmentConsolidatedReportDTO::getRoomId));
+
+        return report;
+    }
+
     @Transactional(readOnly = true)
     public List<RoomReportDTO> getRoomReports(LocalDate date) {
         List<SeatingArrangement> arrangements = arrangementRepository.findByArrangementDateOrdered(date);
