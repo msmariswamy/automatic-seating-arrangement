@@ -623,7 +623,7 @@ public class PdfService {
      */
     public byte[] generateMarksheetPdf(MarksheetReportDTO report, LocalDate date, String fontSize, int blankColumns) throws DocumentException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        Document document = new Document(PageSize.A4.rotate(), 25, 25, 120, 60); // Increased top margin for header + exam details
+        Document document = new Document(PageSize.A4, 25, 25, 120, 60); // Increased top margin for header + exam details
 
         try {
             PdfWriter writer = PdfWriter.getInstance(document, outputStream);
@@ -744,6 +744,7 @@ public class PdfService {
         cell.setHorizontalAlignment(Element.ALIGN_CENTER);
         cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
         cell.setPadding(3);
+        cell.setMinimumHeight(28);
         return cell;
     }
 
@@ -777,7 +778,7 @@ public class PdfService {
         cell.setHorizontalAlignment(Element.ALIGN_CENTER);
         cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
         cell.setPadding(2);
-        cell.setMinimumHeight(16);
+        cell.setMinimumHeight(28);
         return cell;
     }
 
