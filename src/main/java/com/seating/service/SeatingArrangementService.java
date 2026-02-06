@@ -838,8 +838,11 @@ public class SeatingArrangementService {
                 String subject = subjectEntry.getKey();
                 List<SeatingArrangement> subjectArrangements = subjectEntry.getValue();
 
-                // Sort by seat number numerically (L1, L2, ... L10, L11, not L1, L10, L11, L2)
-                subjectArrangements.sort(Comparator.comparing(a -> extractSeatNumber(a.getSeat().getSeatNo())));
+                // Sort by position (R, M, L) first, then by numeric seat number
+                // This ensures all R seats come first, then all M seats, then all L seats
+                subjectArrangements.sort(Comparator
+                        .comparing((SeatingArrangement a) -> getPositionOrder(a.getSeat().getPosition()))
+                        .thenComparing(a -> extractSeatNumber(a.getSeat().getSeatNo())));
 
                 // Get department and class from first student (all should have same subject)
                 String department = subjectArrangements.get(0).getStudent().getDepartment();
@@ -891,6 +894,22 @@ public class SeatingArrangementService {
         } catch (NumberFormatException e) {
             return 0;
         }
+    }
+
+    /**
+     * Gets the position order for sorting (R=0, M=1, L=2)
+     * This ensures seats are ordered: all R seats, then all M seats, then all L seats
+     */
+    private int getPositionOrder(String position) {
+        if (position == null) {
+            return 99;
+        }
+        return switch (position) {
+            case "R" -> 0;
+            case "M" -> 1;
+            case "L" -> 2;
+            default -> 99;
+        };
     }
 
     @Transactional(readOnly = true)
