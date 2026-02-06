@@ -969,6 +969,99 @@ public class SeatingArrangementService {
         return reports;
     }
 
+    /**
+     * Extracts the seat key (prefix + year series) from a roll number/seat number
+     * Format: [2 letters][2 digits]... e.g., BA25001 -> "BA25"
+     */
+    private String extractSeatKey(String rollNo) {
+        if (rollNo == null || rollNo.length() < 4) {
+            return "";
+        }
+        // First 2 characters are prefix, next 2 are year series
+        return rollNo.substring(0, 4).toUpperCase();
+    }
+
+    /**
+     * Generates Consolidated Room Report
+     * Groups by department, showing all rooms for each department
+     * Merges department column when same department appears in multiple rooms
+     */
+    @Transactional(readOnly = true)
+    public List<ConsolidatedRoomReportDTO> getConsolidatedRoomReport(LocalDate date) {
+        List<SeatingArrangement> arrangements = arrangementRepository.findByArrangementDateOrdered(date);
+
+        if (arrangements.isEmpty()) {
+            return List.of();
+        }
+
+        // Group by department first, then by room
+        Map<String, Map<String, List<SeatingArrangement>>> groupedByDeptAndRoom = arrangements.stream()
+                .collect(Collectors.groupingBy(
+                        a -> a.getStudent().getDepartment(),
+                        LinkedHashMap::new, // Preserve order
+                        Collectors.groupingBy(
+                                a -> a.getRoom().getRoomNo(),
+                                LinkedHashMap::new, // Preserve room order
+                                Collectors.toList()
+                        )
+                ));
+
+        List<ConsolidatedRoomReportDTO> report = new ArrayList<>();
+
+        for (Map.Entry<String, Map<String, List<SeatingArrangement>>> deptEntry : groupedByDeptAndRoom.entrySet()) {
+            String department = deptEntry.getKey();
+
+            for (Map.Entry<String, List<SeatingArrangement>> roomEntry : deptEntry.getValue().entrySet()) {
+                String roomNo = roomEntry.getKey();
+                List<SeatingArrangement> roomArrangements = roomEntry.getValue();
+
+                // Get class name from first arrangement (all should be same class for this department-grouped entry)
+                String className = roomArrangements.get(0).getStudent().getClassName();
+                Long roomId = roomArrangements.get(0).getRoom().getId();
+
+                // Extract all seat numbers (roll numbers act as seat numbers in this system)
+                List<String> allSeatNumbers = roomArrangements.stream()
+                        .map(a -> a.getStudent().getRollNo())
+                        .collect(Collectors.toList());
+
+                // Sort by full roll number first to get proper ordering
+                allSeatNumbers.sort(String::compareTo);
+
+                // Calculate from/to seat numbers based on prefix/year series changes
+                List<String> fromSeatNumbers = new ArrayList<>();
+                String lastSeatKey = null;
+
+                for (String seatNo : allSeatNumbers) {
+                    String seatKey = extractSeatKey(seatNo);
+
+                    // If this is the first seat OR key changed (prefix OR year series), add to from list
+                    if (lastSeatKey == null || !seatKey.equals(lastSeatKey)) {
+                        fromSeatNumbers.add(seatNo);
+                        lastSeatKey = seatKey;
+                    }
+                }
+
+                // To seat number is always the last one
+                String toSeatNumber = allSeatNumbers.isEmpty() ? "" : allSeatNumbers.get(allSeatNumbers.size() - 1);
+
+                ConsolidatedRoomReportDTO dto = ConsolidatedRoomReportDTO.builder()
+                        .roomId(roomId)
+                        .department(department)
+                        .className(className)
+                        .roomNo(roomNo)
+                        .fromSeatNumbers(fromSeatNumbers)
+                        .toSeatNumber(toSeatNumber)
+                        .totalCount(allSeatNumbers.size())
+                        .allSeatNumbers(allSeatNumbers)
+                        .build();
+
+                report.add(dto);
+            }
+        }
+
+        return report;
+    }
+
     @Transactional
     public void deleteArrangement(LocalDate date) {
         arrangementRepository.deleteByArrangementDate(date);

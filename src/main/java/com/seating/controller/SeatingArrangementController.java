@@ -2,6 +2,7 @@ package com.seating.controller;
 
 import com.seating.config.ReportConfig;
 import com.seating.dto.ConsolidatedReportDTO;
+import com.seating.dto.ConsolidatedRoomReportDTO;
 import com.seating.dto.JuniorSupervisorReportDTO;
 import com.seating.dto.MarksheetReportDTO;
 import com.seating.dto.RoomReportDTO;
@@ -75,6 +76,41 @@ public class SeatingArrangementController {
             return ResponseEntity.ok(report);
         } catch (Exception e) {
             log.error("Error fetching consolidated report: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/consolidated-room")
+    @ResponseBody
+    public ResponseEntity<List<ConsolidatedRoomReportDTO>> getConsolidatedRoomReport(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        try {
+            List<ConsolidatedRoomReportDTO> report = seatingService.getConsolidatedRoomReport(date);
+            return ResponseEntity.ok(report);
+        } catch (Exception e) {
+            log.error("Error fetching consolidated room report: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/consolidated-room/pdf")
+    @ResponseBody
+    public ResponseEntity<byte[]> downloadConsolidatedRoomPdf(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "10") String fontSize,
+            @RequestParam(defaultValue = "true") boolean showFromTo) {
+        try {
+            List<ConsolidatedRoomReportDTO> report = seatingService.getConsolidatedRoomReport(date);
+            byte[] pdfData = pdfService.generateConsolidatedRoomReportPdf(report, date, fontSize, showFromTo);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", "consolidated_room_report_" + date + ".pdf");
+
+            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Error generating consolidated room PDF: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
