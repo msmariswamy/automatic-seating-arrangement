@@ -838,8 +838,8 @@ public class SeatingArrangementService {
                 String subject = subjectEntry.getKey();
                 List<SeatingArrangement> subjectArrangements = subjectEntry.getValue();
 
-                // Sort by seat number for serial number assignment
-                subjectArrangements.sort(Comparator.comparing(a -> a.getSeat().getSeatNo()));
+                // Sort by seat number numerically (L1, L2, ... L10, L11, not L1, L10, L11, L2)
+                subjectArrangements.sort(Comparator.comparing(a -> extractSeatNumber(a.getSeat().getSeatNo())));
 
                 // Get department and class from first student (all should have same subject)
                 String department = subjectArrangements.get(0).getStudent().getDepartment();
@@ -873,6 +873,79 @@ public class SeatingArrangementService {
         // Sort by room ID, then by subject
         reports.sort(Comparator.comparing(JuniorSupervisorReportDTO::getRoomId)
                 .thenComparing(JuniorSupervisorReportDTO::getSubject));
+
+        return reports;
+    }
+
+    /**
+     * Extracts numeric part from seat number (e.g., "L1" -> 1, "R10" -> 10)
+     */
+    private int extractSeatNumber(String seatNo) {
+        if (seatNo == null || seatNo.isEmpty()) {
+            return 0;
+        }
+        // Remove non-digit characters and parse as integer
+        String numericPart = seatNo.replaceAll("[^0-9]", "");
+        try {
+            return Integer.parseInt(numericPart);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<MarksheetReportDTO> getMarksheetReports(LocalDate date) {
+        List<SeatingArrangement> arrangements = arrangementRepository.findByArrangementDateOrdered(date);
+
+        // Group by subject while preserving seating arrangement order (use LinkedHashMap)
+        Map<String, List<SeatingArrangement>> bySubject = arrangements.stream()
+                .collect(Collectors.groupingBy(
+                        SeatingArrangement::getSubject,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        List<MarksheetReportDTO> reports = new ArrayList<>();
+
+        for (Map.Entry<String, List<SeatingArrangement>> entry : bySubject.entrySet()) {
+            String subject = entry.getKey();
+            List<SeatingArrangement> subjectArrangements = entry.getValue();
+
+            // DO NOT sort - keep the seating arrangement order (room by room, position by position)
+
+            // Get department and class from first student
+            String department = subjectArrangements.get(0).getStudent().getDepartment();
+            String className = subjectArrangements.get(0).getStudent().getClassName();
+
+            // Deduplicate by roll number - keep first occurrence (preserves seating order)
+            Set<String> seenRollNos = new LinkedHashSet<>();
+            List<MarksheetReportDTO.StudentMarksheetEntry> students = new ArrayList<>();
+            int srNo = 1;
+            for (SeatingArrangement arr : subjectArrangements) {
+                String rollNo = arr.getStudent().getRollNo();
+                if (!seenRollNos.contains(rollNo)) {
+                    seenRollNos.add(rollNo);
+                    students.add(MarksheetReportDTO.StudentMarksheetEntry.builder()
+                            .srNo(srNo++)
+                            .seatNo(rollNo)
+                            .roomNo(arr.getRoom().getRoomNo())
+                            .build());
+                }
+            }
+
+            MarksheetReportDTO dto = MarksheetReportDTO.builder()
+                    .subject(subject)
+                    .department(department)
+                    .className(className)
+                    .totalStudents(students.size())
+                    .students(students)
+                    .build();
+
+            reports.add(dto);
+        }
+
+        // Sort by subject name
+        reports.sort(Comparator.comparing(MarksheetReportDTO::getSubject));
 
         return reports;
     }

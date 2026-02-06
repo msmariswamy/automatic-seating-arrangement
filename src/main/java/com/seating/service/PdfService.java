@@ -5,6 +5,7 @@ import com.itextpdf.text.pdf.*;
 import com.seating.config.ReportConfig;
 import com.seating.dto.ConsolidatedReportDTO;
 import com.seating.dto.JuniorSupervisorReportDTO;
+import com.seating.dto.MarksheetReportDTO;
 import com.seating.dto.RoomReportDTO;
 import com.seating.dto.SeatAllocationDTO;
 import lombok.RequiredArgsConstructor;
@@ -615,6 +616,382 @@ public class PdfService {
         }
 
         document.add(new Paragraph(" "));
+    }
+
+    /**
+     * Generates a marksheet PDF for a single subject with all students across all rooms
+     */
+    public byte[] generateMarksheetPdf(MarksheetReportDTO report, LocalDate date, String fontSize, int blankColumns) throws DocumentException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        Document document = new Document(PageSize.A4.rotate(), 25, 25, 80, 60); // Landscape for more columns
+
+        try {
+            PdfWriter writer = PdfWriter.getInstance(document, outputStream);
+
+            // Add header/footer event handler
+            MarksheetHeaderFooter headerFooter = new MarksheetHeaderFooter();
+            writer.setPageEvent(headerFooter);
+
+            document.open();
+
+            // First page: Exam details section
+            addMarksheetExamDetails(document, report);
+
+            // Add student tables (side-by-side layout: 1-20 | 21-40)
+            int totalStudents = report.getStudents().size();
+            int studentsPerPage = 40; // 20 on left + 20 on right
+
+            for (int pageStart = 0; pageStart < totalStudents; pageStart += studentsPerPage) {
+                if (pageStart > 0) {
+                    document.newPage();
+                }
+
+                int pageEnd = Math.min(pageStart + studentsPerPage, totalStudents);
+                addMarksheetStudentTable(document, report, pageStart, pageEnd, blankColumns);
+            }
+
+            // Handle case where there are no students - still show empty table
+            if (totalStudents == 0) {
+                addMarksheetStudentTable(document, report, 0, 0, blankColumns);
+            }
+
+            document.close();
+            log.info("Generated Marksheet PDF for subject {}", report.getSubject());
+
+            return outputStream.toByteArray();
+
+        } catch (Exception e) {
+            log.error("Error generating Marksheet PDF: {}", e.getMessage(), e);
+            throw new DocumentException("Failed to generate Marksheet PDF: " + e.getMessage());
+        }
+    }
+
+    private void addMarksheetExamDetails(Document document, MarksheetReportDTO report) throws DocumentException {
+        Font labelFont = new Font(Font.FontFamily.HELVETICA, 10, Font.BOLD);
+        Font valueFont = new Font(Font.FontFamily.HELVETICA, 10, Font.NORMAL);
+
+        // Calculate seat number range
+        String seatNoRange = "_______";
+        if (!report.getStudents().isEmpty()) {
+            String firstSeatNo = report.getStudents().get(0).getSeatNo();
+            String lastSeatNo = report.getStudents().get(report.getStudents().size() - 1).getSeatNo();
+            seatNoRange = firstSeatNo + " to " + lastSeatNo;
+        }
+
+        // Row 1: Department
+        PdfPTable row1 = new PdfPTable(1);
+        row1.setWidthPercentage(100);
+        row1.setSpacingAfter(3);
+
+        PdfPCell deptCell = new PdfPCell();
+        deptCell.setBorder(Rectangle.NO_BORDER);
+        deptCell.addElement(createLabelValuePhrase("Department: ", report.getDepartment(), labelFont, valueFont));
+        row1.addCell(deptCell);
+        document.add(row1);
+
+        // Row 2: Class, Subject, Date, SEM
+        PdfPTable row2 = new PdfPTable(4);
+        row2.setWidthPercentage(100);
+        row2.setWidths(new float[]{1.5f, 2f, 1.5f, 1f});
+        row2.setSpacingAfter(3);
+
+        PdfPCell classCell = new PdfPCell();
+        classCell.setBorder(Rectangle.NO_BORDER);
+        classCell.addElement(createLabelValuePhrase("Class: ", report.getClassName(), labelFont, valueFont));
+        row2.addCell(classCell);
+
+        PdfPCell subjectCell = new PdfPCell();
+        subjectCell.setBorder(Rectangle.NO_BORDER);
+        subjectCell.addElement(createLabelValuePhrase("Subject: ", report.getSubject(), labelFont, valueFont));
+        row2.addCell(subjectCell);
+
+        PdfPCell dateCell = new PdfPCell();
+        dateCell.setBorder(Rectangle.NO_BORDER);
+        dateCell.addElement(createLabelValuePhrase("Date: ", "_______", labelFont, valueFont));
+        row2.addCell(dateCell);
+
+        PdfPCell semCell = new PdfPCell();
+        semCell.setBorder(Rectangle.NO_BORDER);
+        semCell.addElement(createLabelValuePhrase("SEM: ", "_______", labelFont, valueFont));
+        row2.addCell(semCell);
+
+        document.add(row2);
+
+        // Row 3: Total in Block, Seat No range
+        PdfPTable row3 = new PdfPTable(2);
+        row3.setWidthPercentage(100);
+        row3.setSpacingAfter(3);
+
+        PdfPCell totalBlockCell = new PdfPCell();
+        totalBlockCell.setBorder(Rectangle.NO_BORDER);
+        totalBlockCell.addElement(createLabelValuePhrase("Total No. in Block: ", String.valueOf(report.getTotalStudents()), labelFont, valueFont));
+        row3.addCell(totalBlockCell);
+
+        PdfPCell seatNoCell = new PdfPCell();
+        seatNoCell.setBorder(Rectangle.NO_BORDER);
+        seatNoCell.addElement(createLabelValuePhrase("Seat No.: ", seatNoRange, labelFont, valueFont));
+        row3.addCell(seatNoCell);
+
+        document.add(row3);
+
+        // Row 4: Present/Absent
+        PdfPTable row4 = new PdfPTable(2);
+        row4.setWidthPercentage(100);
+        row4.setSpacingAfter(8);
+
+        PdfPCell presentCell = new PdfPCell();
+        presentCell.setBorder(Rectangle.NO_BORDER);
+        presentCell.addElement(createLabelValuePhrase("Total No. of Candidates Present: ", "_______", labelFont, valueFont));
+        row4.addCell(presentCell);
+
+        PdfPCell absentCell = new PdfPCell();
+        absentCell.setBorder(Rectangle.NO_BORDER);
+        absentCell.addElement(createLabelValuePhrase("Total No. of Candidates Absent: ", "_______", labelFont, valueFont));
+        row4.addCell(absentCell);
+
+        document.add(row4);
+    }
+
+    private void addMarksheetStudentTable(Document document, MarksheetReportDTO report, int startIdx, int endIdx, int blankColumns) throws DocumentException {
+        Font headerFont = new Font(Font.FontFamily.HELVETICA, 9, Font.BOLD);
+        Font cellFont = new Font(Font.FontFamily.HELVETICA, 9, Font.NORMAL);
+
+        // Main container: 2 side-by-side tables (left: 1-20, right: 21-40)
+        PdfPTable mainTable = new PdfPTable(2);
+        mainTable.setWidthPercentage(100);
+        mainTable.setSpacingBefore(5);
+
+        // Calculate columns: Sr No, Seat Number, [blank columns], Total, In Words
+        int totalColumns = 2 + blankColumns + 2; // Sr No, Seat No, blanks..., Total, In Words
+
+        // LEFT TABLE (rows 1-20)
+        PdfPTable leftTable = createMarksheetSubTable(headerFont, blankColumns, totalColumns);
+        int leftStart = startIdx;
+        int leftEnd = Math.min(startIdx + 20, endIdx);
+        addMarksheetRows(leftTable, report.getStudents(), leftStart, leftEnd, cellFont, blankColumns);
+        // Fill empty rows if needed
+        for (int i = leftEnd - startIdx; i < 20; i++) {
+            addEmptyMarksheetRow(leftTable, startIdx + i + 1, cellFont, blankColumns);
+        }
+
+        PdfPCell leftCell = new PdfPCell(leftTable);
+        leftCell.setBorder(Rectangle.NO_BORDER);
+        leftCell.setPaddingRight(5);
+        mainTable.addCell(leftCell);
+
+        // RIGHT TABLE (rows 21-40)
+        PdfPTable rightTable = createMarksheetSubTable(headerFont, blankColumns, totalColumns);
+        int rightStart = startIdx + 20;
+        int rightEnd = Math.min(startIdx + 40, endIdx);
+        if (rightStart < endIdx) {
+            addMarksheetRows(rightTable, report.getStudents(), rightStart, rightEnd, cellFont, blankColumns);
+        }
+        // Fill empty rows
+        int rightRowsFilled = Math.max(0, rightEnd - rightStart);
+        for (int i = rightRowsFilled; i < 20; i++) {
+            addEmptyMarksheetRow(rightTable, startIdx + 20 + i + 1, cellFont, blankColumns);
+        }
+
+        PdfPCell rightCell = new PdfPCell(rightTable);
+        rightCell.setBorder(Rectangle.NO_BORDER);
+        rightCell.setPaddingLeft(5);
+        mainTable.addCell(rightCell);
+
+        document.add(mainTable);
+    }
+
+    private PdfPTable createMarksheetSubTable(Font headerFont, int blankColumns, int totalColumns) throws DocumentException {
+        PdfPTable table = new PdfPTable(totalColumns);
+        table.setWidthPercentage(100);
+
+        // Set column widths
+        float[] widths = new float[totalColumns];
+        widths[0] = 0.8f; // Sr No
+        widths[1] = 2f;   // Seat Number
+        for (int i = 0; i < blankColumns; i++) {
+            widths[2 + i] = 1.2f; // Blank columns
+        }
+        widths[totalColumns - 2] = 1f;  // Total
+        widths[totalColumns - 1] = 2f;  // In Words
+        table.setWidths(widths);
+
+        // Add headers
+        table.addCell(createMarksheetHeaderCell("Sr No", headerFont));
+        table.addCell(createMarksheetHeaderCell("Seat Number", headerFont));
+        for (int i = 1; i <= blankColumns; i++) {
+            table.addCell(createMarksheetHeaderCell("", headerFont)); // Blank column headers
+        }
+        table.addCell(createMarksheetHeaderCell("Total", headerFont));
+        table.addCell(createMarksheetHeaderCell("In Words", headerFont));
+
+        return table;
+    }
+
+    private PdfPCell createMarksheetHeaderCell(String text, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, font));
+        cell.setBackgroundColor(BaseColor.LIGHT_GRAY);
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        cell.setPadding(3);
+        return cell;
+    }
+
+    private void addMarksheetRows(PdfPTable table, List<MarksheetReportDTO.StudentMarksheetEntry> students,
+                                   int start, int end, Font cellFont, int blankColumns) {
+        for (int i = start; i < end; i++) {
+            MarksheetReportDTO.StudentMarksheetEntry student = students.get(i);
+
+            table.addCell(createMarksheetDataCell(String.valueOf(student.getSrNo()), cellFont));
+            table.addCell(createMarksheetDataCell(student.getSeatNo(), cellFont));
+            for (int j = 0; j < blankColumns; j++) {
+                table.addCell(createMarksheetDataCell("", cellFont)); // Blank columns
+            }
+            table.addCell(createMarksheetDataCell("", cellFont)); // Total
+            table.addCell(createMarksheetDataCell("", cellFont)); // In Words
+        }
+    }
+
+    private void addEmptyMarksheetRow(PdfPTable table, int srNo, Font cellFont, int blankColumns) {
+        table.addCell(createMarksheetDataCell(String.valueOf(srNo), cellFont));
+        table.addCell(createMarksheetDataCell("", cellFont)); // Seat Number
+        for (int j = 0; j < blankColumns; j++) {
+            table.addCell(createMarksheetDataCell("", cellFont)); // Blank columns
+        }
+        table.addCell(createMarksheetDataCell("", cellFont)); // Total
+        table.addCell(createMarksheetDataCell("", cellFont)); // In Words
+    }
+
+    private PdfPCell createMarksheetDataCell(String text, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, font));
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        cell.setPadding(2);
+        cell.setMinimumHeight(16);
+        return cell;
+    }
+
+    /**
+     * Generates merged PDF containing all marksheets for all subjects
+     */
+    public byte[] generateAllMarksheetPdfs(List<MarksheetReportDTO> reports, LocalDate date, String fontSize, int blankColumns) throws DocumentException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        try {
+            Document document = new Document(PageSize.A4.rotate());
+            PdfCopy copy = new PdfCopy(document, outputStream);
+            document.open();
+
+            for (MarksheetReportDTO report : reports) {
+                byte[] reportPdf = generateMarksheetPdf(report, date, fontSize, blankColumns);
+                PdfReader reader = new PdfReader(reportPdf);
+
+                for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+                    copy.addPage(copy.getImportedPage(reader, i));
+                }
+
+                reader.close();
+            }
+
+            document.close();
+            log.info("Generated merged Marksheet PDFs for {} subjects on date {}", reports.size(), date);
+
+            return outputStream.toByteArray();
+
+        } catch (Exception e) {
+            log.error("Error generating merged Marksheet PDFs: {}", e.getMessage(), e);
+            throw new DocumentException("Failed to generate merged Marksheet PDFs: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Inner class for Marksheet header and footer on every page
+     */
+    private static class MarksheetHeaderFooter extends PdfPageEventHelper {
+        private Font collegeBold = new Font(Font.FontFamily.HELVETICA, 11, Font.BOLD);
+        private Font collegeNormal = new Font(Font.FontFamily.HELVETICA, 9, Font.NORMAL);
+        private Font titleFont = new Font(Font.FontFamily.HELVETICA, 12, Font.BOLD | Font.UNDERLINE);
+        private Font footerFont = new Font(Font.FontFamily.HELVETICA, 9, Font.NORMAL);
+        private Font footerLabelFont = new Font(Font.FontFamily.HELVETICA, 9, Font.BOLD);
+
+        @Override
+        public void onStartPage(PdfWriter writer, Document document) {
+            try {
+                // Header
+                PdfPTable header = new PdfPTable(1);
+                header.setWidthPercentage(100);
+                header.setTotalWidth(document.getPageSize().getWidth() - document.leftMargin() - document.rightMargin());
+
+                PdfPCell line1Cell = new PdfPCell(new Phrase("SHRI SIDH THAKURNATH COLLEGE OF ARTS & COMMERCE", collegeBold));
+                line1Cell.setBorder(Rectangle.NO_BORDER);
+                line1Cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+                line1Cell.setPaddingBottom(0);
+                header.addCell(line1Cell);
+
+                PdfPCell line2Cell = new PdfPCell(new Phrase("(Affiliated to University of Mumbai, Mumbai)", collegeNormal));
+                line2Cell.setBorder(Rectangle.NO_BORDER);
+                line2Cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+                line2Cell.setPaddingBottom(0);
+                header.addCell(line2Cell);
+
+                PdfPCell line3Cell = new PdfPCell(new Phrase("ULHASNAGAR - 421 004. Dist. Thane", collegeNormal));
+                line3Cell.setBorder(Rectangle.NO_BORDER);
+                line3Cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+                line3Cell.setPaddingBottom(3);
+                header.addCell(line3Cell);
+
+                PdfPCell titleCell = new PdfPCell(new Phrase("Marklist", titleFont));
+                titleCell.setBorder(Rectangle.NO_BORDER);
+                titleCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+                titleCell.setPaddingBottom(5);
+                header.addCell(titleCell);
+
+                header.writeSelectedRows(0, -1, document.leftMargin(),
+                        document.getPageSize().getHeight() - 15, writer.getDirectContent());
+
+            } catch (Exception e) {
+                // Log error but don't fail
+            }
+        }
+
+        @Override
+        public void onEndPage(PdfWriter writer, Document document) {
+            try {
+                // Footer
+                PdfPTable footer = new PdfPTable(2);
+                footer.setWidthPercentage(100);
+                footer.setTotalWidth(document.getPageSize().getWidth() - document.leftMargin() - document.rightMargin());
+
+                // Row 1: Name of Examiner, Signature with date
+                PdfPCell examinerNameCell = new PdfPCell(createFooterPhrase("Name of Examiner: ", "__________"));
+                examinerNameCell.setBorder(Rectangle.NO_BORDER);
+                footer.addCell(examinerNameCell);
+
+                PdfPCell examinerSignCell = new PdfPCell(createFooterPhrase("Signature with date: ", "___________"));
+                examinerSignCell.setBorder(Rectangle.NO_BORDER);
+                footer.addCell(examinerSignCell);
+
+                // Row 2: Checked by, Signature with date
+                PdfPCell checkedByCell = new PdfPCell(createFooterPhrase("Checked by: ", "_________"));
+                checkedByCell.setBorder(Rectangle.NO_BORDER);
+                footer.addCell(checkedByCell);
+
+                PdfPCell checkedSignCell = new PdfPCell(createFooterPhrase("Signature with date: ", "___________"));
+                checkedSignCell.setBorder(Rectangle.NO_BORDER);
+                footer.addCell(checkedSignCell);
+
+                footer.writeSelectedRows(0, -1, document.leftMargin(), 50, writer.getDirectContent());
+
+            } catch (Exception e) {
+                // Log error but don't fail
+            }
+        }
+
+        private Phrase createFooterPhrase(String label, String value) {
+            Phrase phrase = new Phrase();
+            phrase.add(new Chunk(label, footerLabelFont));
+            phrase.add(new Chunk(value, footerFont));
+            return phrase;
+        }
     }
 
     private FontSizes getFontSizes(String fontSize) {

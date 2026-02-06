@@ -3,6 +3,7 @@ package com.seating.controller;
 import com.seating.config.ReportConfig;
 import com.seating.dto.ConsolidatedReportDTO;
 import com.seating.dto.JuniorSupervisorReportDTO;
+import com.seating.dto.MarksheetReportDTO;
 import com.seating.dto.RoomReportDTO;
 import com.seating.dto.SeatingFilterDTO;
 import com.seating.service.PdfService;
@@ -236,6 +237,70 @@ public class SeatingArrangementController {
 
         } catch (Exception e) {
             log.error("Error generating all Junior Supervisor PDFs: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/marksheet")
+    @ResponseBody
+    public ResponseEntity<List<MarksheetReportDTO>> getMarksheetReports(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        try {
+            List<MarksheetReportDTO> reports = seatingService.getMarksheetReports(date);
+            return ResponseEntity.ok(reports);
+        } catch (Exception e) {
+            log.error("Error fetching marksheet reports: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/marksheet/pdf")
+    @ResponseBody
+    public ResponseEntity<byte[]> downloadMarksheetPdf(
+            @RequestParam String subject,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "10") String fontSize,
+            @RequestParam(defaultValue = "3") int blankColumns) {
+        try {
+            List<MarksheetReportDTO> reports = seatingService.getMarksheetReports(date);
+            MarksheetReportDTO report = reports.stream()
+                    .filter(r -> r.getSubject().equals(subject))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Report not found for subject " + subject));
+
+            byte[] pdfData = pdfService.generateMarksheetPdf(report, date, fontSize, blankColumns);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            String filename = "marksheet_" + subject.replaceAll("[^a-zA-Z0-9]", "_") + ".pdf";
+            headers.setContentDispositionFormData("attachment", filename);
+
+            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Error generating Marksheet PDF: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/marksheet/all/pdf")
+    @ResponseBody
+    public ResponseEntity<byte[]> downloadAllMarksheetPdfs(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "10") String fontSize,
+            @RequestParam(defaultValue = "3") int blankColumns) {
+        try {
+            List<MarksheetReportDTO> reports = seatingService.getMarksheetReports(date);
+            byte[] pdfData = pdfService.generateAllMarksheetPdfs(reports, date, fontSize, blankColumns);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", "all_marksheets_" + date + ".pdf");
+
+            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Error generating all Marksheet PDFs: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
