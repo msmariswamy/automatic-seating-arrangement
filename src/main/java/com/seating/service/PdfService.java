@@ -309,7 +309,7 @@ public class PdfService {
 
             PdfPCell subjectCell = new PdfPCell();
             subjectCell.setBorder(Rectangle.NO_BORDER);
-            subjectCell.addElement(createLabelValuePhrase("Subject: ", report.getSubject(), labelFont, valueFont));
+            subjectCell.addElement(createLabelValuePhrase("Subject: ", "_______", labelFont, valueFont));
             detailsTable.addCell(subjectCell);
 
             PdfPCell dateCell = new PdfPCell();
