@@ -228,21 +228,26 @@ public class SeatingArrangementController {
     public ResponseEntity<byte[]> downloadJuniorSupervisorExcel(
             @RequestParam String roomNo,
             @RequestParam String subject,
+            @RequestParam String department,
+            @RequestParam String className,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(defaultValue = "true") boolean showAnswerSheetCol,
             @RequestParam(defaultValue = "true") boolean showSupplementsCol) {
         try {
             List<JuniorSupervisorReportDTO> reports = seatingService.getJuniorSupervisorReports(date);
             JuniorSupervisorReportDTO report = reports.stream()
-                    .filter(r -> r.getRoomNo().equals(roomNo) && r.getSubject().equals(subject))
+                    .filter(r -> r.getRoomNo().equals(roomNo) && r.getSubject().equals(subject)
+                            && r.getDepartment().equals(department) && r.getClassName().equals(className))
                     .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Report not found for room " + roomNo + " and subject " + subject));
+                    .orElseThrow(() -> new IllegalArgumentException("Report not found for room " + roomNo
+                            + ", subject " + subject + ", department " + department + ", class " + className));
 
             byte[] excelData = reportExcelService.generateJuniorSupervisorReportExcel(report, date, showAnswerSheetCol, showSupplementsCol);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(EXCEL_MEDIA_TYPE);
-            String filename = "jr_supervisor_" + roomNo + "_" + subject.replaceAll("[^a-zA-Z0-9]", "_") + ".xlsx";
+            String filename = "jr_supervisor_" + roomNo + "_" + subject.replaceAll("[^a-zA-Z0-9]", "_")
+                    + "_" + department.replaceAll("[^a-zA-Z0-9]", "_") + ".xlsx";
             headers.setContentDispositionFormData("attachment", filename);
 
             return new ResponseEntity<>(excelData, headers, HttpStatus.OK);

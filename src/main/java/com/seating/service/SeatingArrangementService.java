@@ -894,11 +894,11 @@ public class SeatingArrangementService {
     public List<JuniorSupervisorReportDTO> getJuniorSupervisorReports(LocalDate date) {
         List<SeatingArrangement> arrangements = arrangementRepository.findByArrangementDateOrdered(date);
 
-        // Group by room -> subject
+        // Group by room -> subject+department+class (each unique combo gets its own report)
         Map<String, Map<String, List<SeatingArrangement>>> groupedData = arrangements.stream()
                 .collect(Collectors.groupingBy(
                         a -> a.getRoom().getRoomNo(),
-                        Collectors.groupingBy(SeatingArrangement::getSubject)
+                        Collectors.groupingBy(a -> a.getSubject() + "|||" + a.getStudent().getDepartment() + "|||" + a.getStudent().getClassName())
                 ));
 
         List<JuniorSupervisorReportDTO> reports = new ArrayList<>();
@@ -907,7 +907,6 @@ public class SeatingArrangementService {
             String roomNo = roomEntry.getKey();
 
             for (Map.Entry<String, List<SeatingArrangement>> subjectEntry : roomEntry.getValue().entrySet()) {
-                String subject = subjectEntry.getKey();
                 List<SeatingArrangement> subjectArrangements = subjectEntry.getValue();
 
                 // Sort by position (R, M, L) first, then by numeric seat number
@@ -916,7 +915,8 @@ public class SeatingArrangementService {
                         .comparing((SeatingArrangement a) -> getPositionOrder(a.getSeat().getPosition()))
                         .thenComparing(a -> extractSeatNumber(a.getSeat().getSeatNo())));
 
-                // Get department and class from first student (all should have same subject)
+                // Get subject, department and class from first student
+                String subject = subjectArrangements.get(0).getSubject();
                 String department = subjectArrangements.get(0).getStudent().getDepartment();
                 String className = subjectArrangements.get(0).getStudent().getClassName();
                 Long roomId = subjectArrangements.get(0).getRoom().getId();
@@ -945,8 +945,10 @@ public class SeatingArrangementService {
             }
         }
 
-        // Sort by room ID, then by subject
+        // Sort by room ID, then by department, class, and subject
         reports.sort(Comparator.comparing(JuniorSupervisorReportDTO::getRoomId)
+                .thenComparing(JuniorSupervisorReportDTO::getDepartment)
+                .thenComparing(JuniorSupervisorReportDTO::getClassName)
                 .thenComparing(JuniorSupervisorReportDTO::getSubject));
 
         return reports;

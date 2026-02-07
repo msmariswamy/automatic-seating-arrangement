@@ -553,6 +553,8 @@
 
                     roomReports.forEach(report => {
                         let escapedSubject = report.subject.replace(/'/g, "\\'");
+                        let escapedDepartment = report.department.replace(/'/g, "\\'");
+                        let escapedClassName = report.className.replace(/'/g, "\\'");
                         html += `
                             <tr>
                                 <td>${report.subject}</td>
@@ -560,7 +562,7 @@
                                 <td>${report.className}</td>
                                 <td><strong>${report.totalStudents}</strong></td>
                                 <td>
-                                    <button class="btn btn-sm btn-primary" onclick="downloadJuniorSupervisorExcel('${roomNo}', '${escapedSubject}', '${date}')">
+                                    <button class="btn btn-sm btn-primary" onclick="downloadJuniorSupervisorExcel('${roomNo}', '${escapedSubject}', '${escapedDepartment}', '${escapedClassName}', '${date}')">
                                         <i class="fas fa-file-excel"></i> Download Excel
                                     </button>
                                 </td>
@@ -713,10 +715,10 @@
             triggerDownload(`/api/seating/reports/all-rooms/excel?date=${date}&showSubject=${showSubject}`);
         }
 
-        function downloadJuniorSupervisorExcel(roomNo, subject, date) {
+        function downloadJuniorSupervisorExcel(roomNo, subject, department, className, date) {
             let showAnswerSheetCol = $('#showAnswerSheetCol').is(':checked');
             let showSupplementsCol = $('#showSupplementsCol').is(':checked');
-            triggerDownload(`/api/seating/reports/junior-supervisor/excel?roomNo=${encodeURIComponent(roomNo)}&subject=${encodeURIComponent(subject)}&date=${date}&showAnswerSheetCol=${showAnswerSheetCol}&showSupplementsCol=${showSupplementsCol}`);
+            triggerDownload(`/api/seating/reports/junior-supervisor/excel?roomNo=${encodeURIComponent(roomNo)}&subject=${encodeURIComponent(subject)}&department=${encodeURIComponent(department)}&className=${encodeURIComponent(className)}&date=${date}&showAnswerSheetCol=${showAnswerSheetCol}&showSupplementsCol=${showSupplementsCol}`);
         }
 
         function downloadAllJuniorSupervisorExcel() {

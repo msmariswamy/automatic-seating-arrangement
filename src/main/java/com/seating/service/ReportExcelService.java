@@ -283,7 +283,7 @@ public class ReportExcelService {
 
     private void createJuniorSupervisorSheet(Workbook workbook, Styles styles, JuniorSupervisorReportDTO report,
             LocalDate date, boolean showAnswerSheetCol, boolean showSupplementsCol) {
-        String sheetName = getUniqueSheetName(workbook, "Room " + report.getRoomNo() + " - " + report.getSubject());
+        String sheetName = getUniqueSheetName(workbook, report.getRoomNo() + "-" + report.getDepartment() + "-" + report.getClassName() + "-" + report.getSubject());
         Sheet sheet = workbook.createSheet(sheetName);
 
         int totalCols = 3; // Sr No, Seat No, Signature
@@ -571,12 +571,14 @@ public class ReportExcelService {
         String name = sanitizeSheetName(baseName);
         if (workbook.getSheet(name) == null) return name;
 
-        String base = name.length() > 28 ? name.substring(0, 28) : name;
         for (int i = 2; i <= 99; i++) {
-            String candidate = base + " (" + i + ")";
+            String suffix = " (" + i + ")";
+            int maxBaseLen = 31 - suffix.length();
+            String base = name.length() > maxBaseLen ? name.substring(0, maxBaseLen) : name;
+            String candidate = base + suffix;
             if (workbook.getSheet(candidate) == null) return candidate;
         }
-        return base + " (x)";
+        return name.substring(0, 26) + " (xx)";
     }
 
     private String sanitizeSheetName(String name) {
