@@ -645,7 +645,8 @@
         }
 
         function downloadRoomExcel(roomNo, date) {
-            triggerDownload(`/api/seating/reports/room/excel?roomNo=${encodeURIComponent(roomNo)}&date=${date}`);
+            let showSubject = $('#showSubjectCheckbox').is(':checked');
+            triggerDownload(`/api/seating/reports/room/excel?roomNo=${encodeURIComponent(roomNo)}&date=${date}&showSubject=${showSubject}`);
         }
 
         function downloadConsolidatedExcel() {
@@ -663,7 +664,8 @@
         function downloadAllRoomsExcel() {
             let date = $('#arrangementDate').val();
             if (!date) { alert('Please select a date first'); return; }
-            triggerDownload(`/api/seating/reports/all-rooms/excel?date=${date}`);
+            let showSubject = $('#showSubjectCheckbox').is(':checked');
+            triggerDownload(`/api/seating/reports/all-rooms/excel?date=${date}&showSubject=${showSubject}`);
         }
 
         function downloadJuniorSupervisorExcel(roomNo, subject, date) {

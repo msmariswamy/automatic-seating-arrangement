@@ -23,45 +23,55 @@ public class ReportExcelService {
 
     // ===== Room Report =====
 
-    public byte[] generateRoomReportExcel(RoomReportDTO report, LocalDate date) throws IOException {
+    public byte[] generateRoomReportExcel(RoomReportDTO report, LocalDate date, boolean showSubject) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
             Styles styles = createStyles(workbook);
-            createRoomSheet(workbook, styles, report, date);
+            createRoomSheet(workbook, styles, report, date, showSubject);
             return toBytes(workbook);
         }
     }
 
-    public byte[] generateAllRoomsReportExcel(List<RoomReportDTO> reports, LocalDate date) throws IOException {
+    public byte[] generateAllRoomsReportExcel(List<RoomReportDTO> reports, LocalDate date, boolean showSubject) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
             Styles styles = createStyles(workbook);
             for (RoomReportDTO report : reports) {
-                createRoomSheet(workbook, styles, report, date);
+                createRoomSheet(workbook, styles, report, date, showSubject);
             }
             return toBytes(workbook);
         }
     }
 
-    private void createRoomSheet(Workbook workbook, Styles styles, RoomReportDTO report, LocalDate date) {
+    private void createRoomSheet(Workbook workbook, Styles styles, RoomReportDTO report, LocalDate date, boolean showSubject) {
         String sheetName = getUniqueSheetName(workbook, "Room " + report.getRoomNo());
         Sheet sheet = workbook.createSheet(sheetName);
+
+        // Column layout depends on showSubject
+        // Without subject: Seat,Roll | gap | Seat,Roll | gap | Seat,Roll  (cols per section=2, gap=1)
+        // With subject:    Seat,Roll,Subject | gap | Seat,Roll,Subject | gap | Seat,Roll,Subject
+        int colsPerSection = showSubject ? 3 : 2;
+        int sectionGap = 1;
+        int rOffset = 0;
+        int mOffset = colsPerSection + sectionGap;
+        int lOffset = 2 * (colsPerSection + sectionGap);
+        int totalCols = lOffset + colsPerSection;
 
         int rowIdx = 0;
 
         // College header
-        rowIdx = addCollegeHeader(sheet, rowIdx, styles, 8);
+        rowIdx = addCollegeHeader(sheet, rowIdx, styles, totalCols);
 
         // Title
         Row titleRow = sheet.createRow(rowIdx);
         Cell titleCell = titleRow.createCell(0);
         titleCell.setCellValue("Individual Room Report");
         titleCell.setCellStyle(styles.title);
-        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 7));
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, totalCols - 1));
         rowIdx += 2;
 
         // Room info
         Row roomRow = sheet.createRow(rowIdx++);
         createCell(roomRow, 0, "Room No: " + report.getRoomNo(), styles.bold);
-        createCell(roomRow, 4, "Date: " + date, styles.bold);
+        createCell(roomRow, mOffset, "Date: " + date, styles.bold);
 
         Row deptRow = sheet.createRow(rowIdx++);
         createCell(deptRow, 0, "Departments: " + String.join(", ", report.getDepartments()), styles.normal);
@@ -71,25 +81,33 @@ public class ReportExcelService {
 
         rowIdx++; // blank row
 
-        // Section headers: Right (cols 0-1), Middle (cols 3-4), Left (cols 6-7)
+        // Section headers
         Row sectionRow = sheet.createRow(rowIdx);
-        createCell(sectionRow, 0, "Right Seats (R)", styles.header);
-        createCell(sectionRow, 1, "", styles.header);
-        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 1));
-        createCell(sectionRow, 3, "Middle Seats (M)", styles.header);
-        createCell(sectionRow, 4, "", styles.header);
-        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 3, 4));
-        createCell(sectionRow, 6, "Left Seats (L)", styles.header);
-        createCell(sectionRow, 7, "", styles.header);
-        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 6, 7));
+        for (int c = rOffset; c < rOffset + colsPerSection; c++)
+            createCell(sectionRow, c, "", styles.header);
+        sectionRow.getCell(rOffset).setCellValue("Right Seats (R)");
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, rOffset, rOffset + colsPerSection - 1));
+
+        for (int c = mOffset; c < mOffset + colsPerSection; c++)
+            createCell(sectionRow, c, "", styles.header);
+        sectionRow.getCell(mOffset).setCellValue("Middle Seats (M)");
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, mOffset, mOffset + colsPerSection - 1));
+
+        for (int c = lOffset; c < lOffset + colsPerSection; c++)
+            createCell(sectionRow, c, "", styles.header);
+        sectionRow.getCell(lOffset).setCellValue("Left Seats (L)");
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, lOffset, lOffset + colsPerSection - 1));
         rowIdx++;
 
         // Sub-headers
         Row subHeaderRow = sheet.createRow(rowIdx++);
-        int[] colOffsets = {0, 3, 6};
-        for (int offset : colOffsets) {
+        int[] offsets = {rOffset, mOffset, lOffset};
+        for (int offset : offsets) {
             createCell(subHeaderRow, offset, "Seat", styles.header);
             createCell(subHeaderRow, offset + 1, "Roll No", styles.header);
+            if (showSubject) {
+                createCell(subHeaderRow, offset + 2, "Subject", styles.header);
+            }
         }
 
         // Data rows
@@ -101,35 +119,41 @@ public class ReportExcelService {
         for (int i = 0; i < maxRows; i++) {
             Row dataRow = sheet.createRow(rowIdx + i);
 
-            // Right seats - always create cells for border grid
-            Cell rSeat = createCell(dataRow, 0, "", styles.centered);
-            Cell rRoll = createCell(dataRow, 1, "", styles.centered);
+            // Right seats
+            Cell rSeat = createCell(dataRow, rOffset, "", styles.centered);
+            Cell rRoll = createCell(dataRow, rOffset + 1, "", styles.centered);
+            Cell rSubj = showSubject ? createCell(dataRow, rOffset + 2, "", styles.centered) : null;
             if (i < rightSize) {
                 SeatAllocationDTO seat = report.getRightSeats().get(i);
                 rSeat.setCellValue(seat.getSeatNo());
                 rRoll.setCellValue(seat.getRollNo());
+                if (rSubj != null && seat.getSubject() != null) rSubj.setCellValue(seat.getSubject());
             }
 
             // Middle seats
-            Cell mSeat = createCell(dataRow, 3, "", styles.centered);
-            Cell mRoll = createCell(dataRow, 4, "", styles.centered);
+            Cell mSeat = createCell(dataRow, mOffset, "", styles.centered);
+            Cell mRoll = createCell(dataRow, mOffset + 1, "", styles.centered);
+            Cell mSubj = showSubject ? createCell(dataRow, mOffset + 2, "", styles.centered) : null;
             if (i < middleSize) {
                 SeatAllocationDTO seat = report.getMiddleSeats().get(i);
                 mSeat.setCellValue(seat.getSeatNo());
                 mRoll.setCellValue(seat.getRollNo());
+                if (mSubj != null && seat.getSubject() != null) mSubj.setCellValue(seat.getSubject());
             }
 
             // Left seats
-            Cell lSeat = createCell(dataRow, 6, "", styles.centered);
-            Cell lRoll = createCell(dataRow, 7, "", styles.centered);
+            Cell lSeat = createCell(dataRow, lOffset, "", styles.centered);
+            Cell lRoll = createCell(dataRow, lOffset + 1, "", styles.centered);
+            Cell lSubj = showSubject ? createCell(dataRow, lOffset + 2, "", styles.centered) : null;
             if (i < leftSize) {
                 SeatAllocationDTO seat = report.getLeftSeats().get(i);
                 lSeat.setCellValue(seat.getSeatNo());
                 lRoll.setCellValue(seat.getRollNo());
+                if (lSubj != null && seat.getSubject() != null) lSubj.setCellValue(seat.getSubject());
             }
         }
 
-        autoSizeColumns(sheet, 8);
+        autoSizeColumns(sheet, totalCols);
     }
 
     // ===== Consolidated Report =====
