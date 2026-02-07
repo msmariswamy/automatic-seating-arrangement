@@ -158,17 +158,20 @@ public class ReportExcelService {
 
     // ===== Consolidated Report =====
 
-    public byte[] generateConsolidatedReportExcel(List<ConsolidatedReportDTO> report, LocalDate date) throws IOException {
+    public byte[] generateConsolidatedReportExcel(List<ConsolidatedReportDTO> report, LocalDate date,
+            boolean showAllRollNumbers) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
             Styles styles = createStyles(workbook);
             Sheet sheet = workbook.createSheet("Consolidated Report");
 
+            int totalCols = showAllRollNumbers ? 5 : 6;
+
             int rowIdx = 0;
-            rowIdx = addCollegeHeader(sheet, rowIdx, styles, 6);
+            rowIdx = addCollegeHeader(sheet, rowIdx, styles, totalCols);
 
             Row titleRow = sheet.createRow(rowIdx);
             createCell(titleRow, 0, "Consolidated Report", styles.title);
-            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 5));
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, totalCols - 1));
             rowIdx += 2;
 
             Row dateRow = sheet.createRow(rowIdx++);
@@ -177,24 +180,41 @@ public class ReportExcelService {
 
             // Table headers
             Row headerRow = sheet.createRow(rowIdx++);
-            String[] headers = {"Sr No", "Room No", "Department", "Roll No From", "Roll No To", "Total Count"};
-            for (int i = 0; i < headers.length; i++) {
-                createCell(headerRow, i, headers[i], styles.header);
+            if (showAllRollNumbers) {
+                String[] headers = {"Sr No", "Room No", "Department", "Roll Numbers", "Total Count"};
+                for (int i = 0; i < headers.length; i++) {
+                    createCell(headerRow, i, headers[i], styles.header);
+                }
+            } else {
+                String[] headers = {"Sr No", "Room No", "Department", "Roll No From", "Roll No To", "Total Count"};
+                for (int i = 0; i < headers.length; i++) {
+                    createCell(headerRow, i, headers[i], styles.header);
+                }
             }
 
             // Data
             int srNo = 1;
             for (ConsolidatedReportDTO row : report) {
                 Row dataRow = sheet.createRow(rowIdx++);
-                createNumericCell(dataRow, 0, srNo++, styles.centered);
-                createCell(dataRow, 1, row.getRoomNo(), styles.centered);
-                createCell(dataRow, 2, row.getDepartment(), styles.centered);
-                createCell(dataRow, 3, row.getRollNoFrom(), styles.centered);
-                createCell(dataRow, 4, row.getRollNoTo(), styles.centered);
-                createNumericCell(dataRow, 5, row.getTotalCount(), styles.centered);
+                if (showAllRollNumbers) {
+                    createNumericCell(dataRow, 0, srNo++, styles.centered);
+                    createCell(dataRow, 1, row.getRoomNo(), styles.centered);
+                    createCell(dataRow, 2, row.getDepartment(), styles.centered);
+                    String allRolls = row.getAllRollNumbers() != null
+                            ? String.join(", ", row.getAllRollNumbers()) : "";
+                    createCell(dataRow, 3, allRolls, styles.centeredWrap);
+                    createNumericCell(dataRow, 4, row.getTotalCount(), styles.centered);
+                } else {
+                    createNumericCell(dataRow, 0, srNo++, styles.centered);
+                    createCell(dataRow, 1, row.getRoomNo(), styles.centered);
+                    createCell(dataRow, 2, row.getDepartment(), styles.centered);
+                    createCell(dataRow, 3, row.getRollNoFrom(), styles.centered);
+                    createCell(dataRow, 4, row.getRollNoTo(), styles.centered);
+                    createNumericCell(dataRow, 5, row.getTotalCount(), styles.centered);
+                }
             }
 
-            autoSizeColumns(sheet, 6);
+            autoSizeColumns(sheet, totalCols);
             return toBytes(workbook);
         }
     }
@@ -583,12 +603,14 @@ public class ReportExcelService {
                 createBoldStyle(workbook),
                 createNormalStyle(workbook),
                 createCenteredStyle(workbook),
-                createCenteredNoBorderStyle(workbook)
+                createCenteredNoBorderStyle(workbook),
+                createCenteredWrapStyle(workbook)
         );
     }
 
     private record Styles(CellStyle header, CellStyle title, CellStyle underlineTitle,
-                           CellStyle bold, CellStyle normal, CellStyle centered, CellStyle centeredNoBorder) {}
+                           CellStyle bold, CellStyle normal, CellStyle centered,
+                           CellStyle centeredNoBorder, CellStyle centeredWrap) {}
 
     private CellStyle createHeaderStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
@@ -664,6 +686,21 @@ public class ReportExcelService {
         font.setFontHeightInPoints((short) 10);
         style.setFont(font);
         style.setAlignment(HorizontalAlignment.CENTER);
+        return style;
+    }
+
+    private CellStyle createCenteredWrapStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setFontHeightInPoints((short) 10);
+        style.setFont(font);
+        style.setAlignment(HorizontalAlignment.LEFT);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setWrapText(true);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
         return style;
     }
 }

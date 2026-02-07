@@ -720,8 +720,12 @@ public class SeatingArrangementService {
                 // Sort by roll number to get first and last roll numbers
                 deptArrangements.sort(Comparator.comparing(a -> a.getStudent().getRollNo()));
 
-                String rollNoFrom = deptArrangements.get(0).getStudent().getRollNo();
-                String rollNoTo = deptArrangements.get(deptArrangements.size() - 1).getStudent().getRollNo();
+                List<String> allRollNumbers = deptArrangements.stream()
+                        .map(a -> a.getStudent().getRollNo())
+                        .collect(Collectors.toList());
+
+                String rollNoFrom = allRollNumbers.get(0);
+                String rollNoTo = allRollNumbers.get(allRollNumbers.size() - 1);
 
                 // Get room ID from the first arrangement (all have same room)
                 Long roomId = deptArrangements.get(0).getRoom().getId();
@@ -732,6 +736,7 @@ public class SeatingArrangementService {
                         .department(department)
                         .rollNoFrom(rollNoFrom)
                         .rollNoTo(rollNoTo)
+                        .allRollNumbers(allRollNumbers)
                         .totalCount(deptArrangements.size())
                         .build();
 

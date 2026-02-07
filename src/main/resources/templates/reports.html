@@ -164,17 +164,15 @@
                             <h6 style="font-weight: bold;" th:text="${reportHeaderLine2}"></h6>
                             <h5 class="mt-2"><strong>Consolidated Report</strong></h5>
                         </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="showAllRollNumbers" onchange="renderConsolidatedReport()">
+                            <label class="form-check-label" for="showAllRollNumbers">
+                                Show All Roll Numbers
+                            </label>
+                        </div>
                         <div class="table-responsive">
                             <table class="table table-striped table-hover" id="consolidatedTable">
-                                <thead>
-                                    <tr>
-                                        <th>Sr No</th>
-                                        <th>Room No</th>
-                                        <th>Department</th>
-                                        <th>Roll No From</th>
-                                        <th>Roll No To</th>
-                                        <th>Total Count</th>
-                                    </tr>
+                                <thead id="consolidatedTableHead">
                                 </thead>
                                 <tbody></tbody>
                             </table>
@@ -334,10 +332,56 @@
             loadMarksheetReports(date);
         }
 
+        // Store consolidated data for toggle functionality
+        let consolidatedData = [];
+
         function loadConsolidatedReport(date) {
             $.get(`/api/seating/reports/consolidated?date=${date}`, function(data) {
-                let tbody = '';
-                data.forEach((row, index) => {
+                consolidatedData = data;
+                renderConsolidatedReport();
+                $('#consolidatedHeader').show();
+                $('#downloadConsolidatedBtn').show();
+            });
+        }
+
+        function renderConsolidatedReport() {
+            let showAll = $('#showAllRollNumbers').is(':checked');
+
+            // Update table headers
+            let thead = '';
+            if (showAll) {
+                thead = `<tr>
+                    <th>Sr No</th>
+                    <th>Room No</th>
+                    <th>Department</th>
+                    <th>Roll Numbers</th>
+                    <th>Total Count</th>
+                </tr>`;
+            } else {
+                thead = `<tr>
+                    <th>Sr No</th>
+                    <th>Room No</th>
+                    <th>Department</th>
+                    <th>Roll No From</th>
+                    <th>Roll No To</th>
+                    <th>Total Count</th>
+                </tr>`;
+            }
+            $('#consolidatedTableHead').html(thead);
+
+            // Update table body
+            let tbody = '';
+            consolidatedData.forEach((row, index) => {
+                if (showAll) {
+                    let allRolls = row.allRollNumbers ? row.allRollNumbers.join(', ') : '';
+                    tbody += `<tr>
+                        <td>${index + 1}</td>
+                        <td>${row.roomNo}</td>
+                        <td>${row.department}</td>
+                        <td style="text-align:left;">${allRolls}</td>
+                        <td><strong>${row.totalCount}</strong></td>
+                    </tr>`;
+                } else {
                     tbody += `<tr>
                         <td>${index + 1}</td>
                         <td>${row.roomNo}</td>
@@ -346,11 +390,9 @@
                         <td>${row.rollNoTo}</td>
                         <td><strong>${row.totalCount}</strong></td>
                     </tr>`;
-                });
-                $('#consolidatedTable tbody').html(tbody);
-                $('#consolidatedHeader').show();
-                $('#downloadConsolidatedBtn').show();
+                }
             });
+            $('#consolidatedTable tbody').html(tbody);
         }
 
         // Store department consolidated data for toggle functionality
@@ -654,7 +696,8 @@
         function downloadConsolidatedExcel() {
             let date = $('#arrangementDate').val();
             if (!date) { alert('Please select a date first'); return; }
-            triggerDownload(`/api/seating/reports/consolidated/excel?date=${date}`);
+            let showAllRollNumbers = $('#showAllRollNumbers').is(':checked');
+            triggerDownload(`/api/seating/reports/consolidated/excel?date=${date}&showAllRollNumbers=${showAllRollNumbers}`);
         }
 
         function downloadDepartmentConsolidatedExcel() {

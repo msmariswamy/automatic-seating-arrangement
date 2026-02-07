@@ -2,6 +2,8 @@ package com.seating.dto;
 
 import lombok.*;
 
+import java.util.List;
+
 /**
  * DTO for consolidated report
  */
@@ -15,5 +17,6 @@ public class ConsolidatedReportDTO {
     private String department;
     private String rollNoFrom;
     private String rollNoTo;
+    private List<String> allRollNumbers;
     private Integer totalCount;
 }

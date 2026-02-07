@@ -139,10 +139,11 @@ public class SeatingArrangementController {
     @GetMapping("/reports/consolidated/excel")
     @ResponseBody
     public ResponseEntity<byte[]> downloadConsolidatedExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "false") boolean showAllRollNumbers) {
         try {
             List<ConsolidatedReportDTO> report = seatingService.getConsolidatedReport(date);
-            byte[] excelData = reportExcelService.generateConsolidatedReportExcel(report, date);
+            byte[] excelData = reportExcelService.generateConsolidatedReportExcel(report, date, showAllRollNumbers);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(EXCEL_MEDIA_TYPE);
