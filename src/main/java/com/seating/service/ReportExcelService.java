@@ -422,7 +422,7 @@ public class ReportExcelService {
 
     private void createMarksheetSheet(Workbook workbook, Styles styles, MarksheetReportDTO report,
             LocalDate date, int blankColumns) {
-        String sheetName = getUniqueSheetName(workbook, report.getSubject() + " - " + report.getClassName());
+        String sheetName = getUniqueSheetName(workbook, report.getDepartment() + " - " + report.getClassName());
         Sheet sheet = workbook.createSheet(sheetName);
 
         int totalCols = 2 + blankColumns + 2; // Sr No, Seat Number, blanks..., Total, In Words
