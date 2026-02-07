@@ -305,17 +305,15 @@
                             <h6 style="font-weight: bold;" th:text="${reportHeaderLine2}"></h6>
                             <h5 class="mt-2"><strong>Department Consolidated Report</strong></h5>
                         </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="showDeptAllRollNumbers" onchange="renderDepartmentConsolidatedReport()">
+                            <label class="form-check-label" for="showDeptAllRollNumbers">
+                                Show All Roll Numbers
+                            </label>
+                        </div>
                         <div class="table-responsive">
                             <table class="table table-bordered table-hover" id="deptConsolidatedTable">
-                                <thead class="table-primary">
-                                    <tr>
-                                        <th>Department</th>
-                                        <th>Class</th>
-                                        <th>Room No</th>
-                                        <th>From Seat No</th>
-                                        <th>To Seat No</th>
-                                        <th>Total Count</th>
-                                    </tr>
+                                <thead class="table-primary" id="deptConsolidatedTableHead">
                                 </thead>
                                 <tbody></tbody>
                             </table>
@@ -579,6 +577,30 @@
         }
 
         function renderDepartmentConsolidatedReport() {
+            let showAll = $('#showDeptAllRollNumbers').is(':checked');
+
+            // Update table headers
+            let thead = '';
+            if (showAll) {
+                thead = `<tr>
+                    <th>Department</th>
+                    <th>Class</th>
+                    <th>Room No</th>
+                    <th>Roll Numbers</th>
+                    <th>Total Count</th>
+                </tr>`;
+            } else {
+                thead = `<tr>
+                    <th>Department</th>
+                    <th>Class</th>
+                    <th>Room No</th>
+                    <th>From Seat No</th>
+                    <th>To Seat No</th>
+                    <th>Total Count</th>
+                </tr>`;
+            }
+            $('#deptConsolidatedTableHead').html(thead);
+
             let tbody = '';
 
             // Group data by department for rowspan calculation
@@ -602,11 +624,19 @@
                         tbody += `<td rowspan="${deptRowspan}" class="align-middle" style="font-weight: bold; background-color: #f8f9fa;">${row.department}</td>`;
                     }
 
-                    tbody += `<td>${row.className}</td>`;
-                    tbody += `<td>${row.roomNo}</td>`;
-                    tbody += `<td class="from-to-column">${row.fromSeat || ''}</td>`;
-                    tbody += `<td class="from-to-column">${row.toSeat || ''}</td>`;
-                    tbody += `<td><strong>${row.totalCount}</strong></td>`;
+                    if (showAll) {
+                        let allRolls = row.allRollNumbers ? row.allRollNumbers.join(', ') : '';
+                        tbody += `<td>${row.className}</td>`;
+                        tbody += `<td>${row.roomNo}</td>`;
+                        tbody += `<td style="text-align:left;">${allRolls}</td>`;
+                        tbody += `<td><strong>${row.totalCount}</strong></td>`;
+                    } else {
+                        tbody += `<td>${row.className}</td>`;
+                        tbody += `<td>${row.roomNo}</td>`;
+                        tbody += `<td class="from-to-column">${row.fromSeat || ''}</td>`;
+                        tbody += `<td class="from-to-column">${row.toSeat || ''}</td>`;
+                        tbody += `<td><strong>${row.totalCount}</strong></td>`;
+                    }
                     tbody += '</tr>';
                 });
             }
@@ -900,7 +930,8 @@
         function downloadDepartmentConsolidatedExcel(btn) {
             let date = $('#arrangementDate').val();
             if (!date) { showToast('Please select a date first', 'warning'); return; }
-            triggerDownload(`/api/seating/reports/department-consolidated/excel?date=${date}`, btn);
+            let showAllRollNumbers = $('#showDeptAllRollNumbers').is(':checked');
+            triggerDownload(`/api/seating/reports/department-consolidated/excel?date=${date}&showAllRollNumbers=${showAllRollNumbers}`, btn);
         }
 
         function downloadAllRoomsExcel(btn) {

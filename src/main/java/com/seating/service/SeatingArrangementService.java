@@ -802,6 +802,7 @@ public class SeatingArrangementService {
                             .roomNo(roomNo)
                             .fromSeat(fromSeat)
                             .toSeat(toSeat)
+                            .allRollNumbers(seatNumbers)
                             .totalCount(seatNumbers.size())
                             .build();
 

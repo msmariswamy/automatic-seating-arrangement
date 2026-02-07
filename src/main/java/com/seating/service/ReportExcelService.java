@@ -221,17 +221,20 @@ public class ReportExcelService {
 
     // ===== Department Consolidated Report =====
 
-    public byte[] generateDepartmentConsolidatedReportExcel(List<DepartmentConsolidatedReportDTO> report, LocalDate date) throws IOException {
+    public byte[] generateDepartmentConsolidatedReportExcel(List<DepartmentConsolidatedReportDTO> report, LocalDate date,
+            boolean showAllRollNumbers) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
             Styles styles = createStyles(workbook);
             Sheet sheet = workbook.createSheet("Dept Consolidated Report");
 
+            int totalCols = showAllRollNumbers ? 5 : 6;
+
             int rowIdx = 0;
-            rowIdx = addCollegeHeader(sheet, rowIdx, styles, 6);
+            rowIdx = addCollegeHeader(sheet, rowIdx, styles, totalCols);
 
             Row titleRow = sheet.createRow(rowIdx);
             createCell(titleRow, 0, "Department Consolidated Report", styles.title);
-            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 5));
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, totalCols - 1));
             rowIdx += 2;
 
             Row dateRow = sheet.createRow(rowIdx++);
@@ -239,22 +242,39 @@ public class ReportExcelService {
             rowIdx++;
 
             Row headerRow = sheet.createRow(rowIdx++);
-            String[] headers = {"Department", "Class", "Room No", "From Seat No", "To Seat No", "Total Count"};
-            for (int i = 0; i < headers.length; i++) {
-                createCell(headerRow, i, headers[i], styles.header);
+            if (showAllRollNumbers) {
+                String[] headers = {"Department", "Class", "Room No", "Roll Numbers", "Total Count"};
+                for (int i = 0; i < headers.length; i++) {
+                    createCell(headerRow, i, headers[i], styles.header);
+                }
+            } else {
+                String[] headers = {"Department", "Class", "Room No", "From Seat No", "To Seat No", "Total Count"};
+                for (int i = 0; i < headers.length; i++) {
+                    createCell(headerRow, i, headers[i], styles.header);
+                }
             }
 
             for (DepartmentConsolidatedReportDTO row : report) {
                 Row dataRow = sheet.createRow(rowIdx++);
-                createCell(dataRow, 0, row.getDepartment(), styles.centered);
-                createCell(dataRow, 1, row.getClassName(), styles.centered);
-                createCell(dataRow, 2, row.getRoomNo(), styles.centered);
-                createCell(dataRow, 3, row.getFromSeat() != null ? row.getFromSeat() : "", styles.centered);
-                createCell(dataRow, 4, row.getToSeat() != null ? row.getToSeat() : "", styles.centered);
-                createNumericCell(dataRow, 5, row.getTotalCount(), styles.centered);
+                if (showAllRollNumbers) {
+                    createCell(dataRow, 0, row.getDepartment(), styles.centered);
+                    createCell(dataRow, 1, row.getClassName(), styles.centered);
+                    createCell(dataRow, 2, row.getRoomNo(), styles.centered);
+                    String allRolls = row.getAllRollNumbers() != null
+                            ? String.join(", ", row.getAllRollNumbers()) : "";
+                    createCell(dataRow, 3, allRolls, styles.centeredWrap);
+                    createNumericCell(dataRow, 4, row.getTotalCount(), styles.centered);
+                } else {
+                    createCell(dataRow, 0, row.getDepartment(), styles.centered);
+                    createCell(dataRow, 1, row.getClassName(), styles.centered);
+                    createCell(dataRow, 2, row.getRoomNo(), styles.centered);
+                    createCell(dataRow, 3, row.getFromSeat() != null ? row.getFromSeat() : "", styles.centered);
+                    createCell(dataRow, 4, row.getToSeat() != null ? row.getToSeat() : "", styles.centered);
+                    createNumericCell(dataRow, 5, row.getTotalCount(), styles.centered);
+                }
             }
 
-            autoSizeColumns(sheet, 6);
+            autoSizeColumns(sheet, totalCols);
             return toBytes(workbook);
         }
     }

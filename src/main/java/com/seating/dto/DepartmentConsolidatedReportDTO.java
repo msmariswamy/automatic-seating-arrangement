@@ -2,6 +2,8 @@ package com.seating.dto;
 
 import lombok.*;
 
+import java.util.List;
+
 /**
  * DTO for department-consolidated report grouped by department, class, and room.
  */
@@ -16,5 +18,6 @@ public class DepartmentConsolidatedReportDTO {
     private String roomNo;
     private String fromSeat;       // First seat number
     private String toSeat;         // Last seat number
+    private List<String> allRollNumbers;
     private Integer totalCount;    // Total number of seats
 }
