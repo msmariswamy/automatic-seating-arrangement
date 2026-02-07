@@ -164,11 +164,11 @@ public class ReportExcelService {
             Sheet sheet = workbook.createSheet("Consolidated Report");
 
             int rowIdx = 0;
-            rowIdx = addCollegeHeader(sheet, rowIdx, styles, 5);
+            rowIdx = addCollegeHeader(sheet, rowIdx, styles, 6);
 
             Row titleRow = sheet.createRow(rowIdx);
             createCell(titleRow, 0, "Consolidated Report", styles.title);
-            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 4));
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 5));
             rowIdx += 2;
 
             Row dateRow = sheet.createRow(rowIdx++);
@@ -177,22 +177,24 @@ public class ReportExcelService {
 
             // Table headers
             Row headerRow = sheet.createRow(rowIdx++);
-            String[] headers = {"Room No", "Department", "Roll No From", "Roll No To", "Total Count"};
+            String[] headers = {"Sr No", "Room No", "Department", "Roll No From", "Roll No To", "Total Count"};
             for (int i = 0; i < headers.length; i++) {
                 createCell(headerRow, i, headers[i], styles.header);
             }
 
             // Data
+            int srNo = 1;
             for (ConsolidatedReportDTO row : report) {
                 Row dataRow = sheet.createRow(rowIdx++);
-                createCell(dataRow, 0, row.getRoomNo(), styles.centered);
-                createCell(dataRow, 1, row.getDepartment(), styles.centered);
-                createCell(dataRow, 2, row.getRollNoFrom(), styles.centered);
-                createCell(dataRow, 3, row.getRollNoTo(), styles.centered);
-                createNumericCell(dataRow, 4, row.getTotalCount(), styles.centered);
+                createNumericCell(dataRow, 0, srNo++, styles.centered);
+                createCell(dataRow, 1, row.getRoomNo(), styles.centered);
+                createCell(dataRow, 2, row.getDepartment(), styles.centered);
+                createCell(dataRow, 3, row.getRollNoFrom(), styles.centered);
+                createCell(dataRow, 4, row.getRollNoTo(), styles.centered);
+                createNumericCell(dataRow, 5, row.getTotalCount(), styles.centered);
             }
 
-            autoSizeColumns(sheet, 5);
+            autoSizeColumns(sheet, 6);
             return toBytes(workbook);
         }
     }
