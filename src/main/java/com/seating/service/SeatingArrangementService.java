@@ -990,31 +990,30 @@ public class SeatingArrangementService {
     public List<MarksheetReportDTO> getMarksheetReports(LocalDate date) {
         List<SeatingArrangement> arrangements = arrangementRepository.findByArrangementDateOrdered(date);
 
-        // Group by subject while preserving seating arrangement order (use LinkedHashMap)
-        Map<String, List<SeatingArrangement>> bySubject = arrangements.stream()
+        // Group by subject + department + class while preserving seating arrangement order
+        Map<String, List<SeatingArrangement>> bySubjectDeptClass = arrangements.stream()
                 .collect(Collectors.groupingBy(
-                        SeatingArrangement::getSubject,
+                        arr -> arr.getSubject() + "||" + arr.getStudent().getDepartment() + "||" + arr.getStudent().getClassName(),
                         LinkedHashMap::new,
                         Collectors.toList()
                 ));
 
         List<MarksheetReportDTO> reports = new ArrayList<>();
 
-        for (Map.Entry<String, List<SeatingArrangement>> entry : bySubject.entrySet()) {
-            String subject = entry.getKey();
-            List<SeatingArrangement> subjectArrangements = entry.getValue();
+        for (Map.Entry<String, List<SeatingArrangement>> entry : bySubjectDeptClass.entrySet()) {
+            List<SeatingArrangement> groupArrangements = entry.getValue();
 
             // DO NOT sort - keep the seating arrangement order (room by room, position by position)
 
-            // Get department and class from first student
-            String department = subjectArrangements.get(0).getStudent().getDepartment();
-            String className = subjectArrangements.get(0).getStudent().getClassName();
+            String subject = groupArrangements.get(0).getSubject();
+            String department = groupArrangements.get(0).getStudent().getDepartment();
+            String className = groupArrangements.get(0).getStudent().getClassName();
 
             // Deduplicate by roll number - keep first occurrence (preserves seating order)
             Set<String> seenRollNos = new LinkedHashSet<>();
             List<MarksheetReportDTO.StudentMarksheetEntry> students = new ArrayList<>();
             int srNo = 1;
-            for (SeatingArrangement arr : subjectArrangements) {
+            for (SeatingArrangement arr : groupArrangements) {
                 String rollNo = arr.getStudent().getRollNo();
                 if (!seenRollNos.contains(rollNo)) {
                     seenRollNos.add(rollNo);
@@ -1037,8 +1036,10 @@ public class SeatingArrangementService {
             reports.add(dto);
         }
 
-        // Sort by subject name
-        reports.sort(Comparator.comparing(MarksheetReportDTO::getSubject));
+        // Sort by subject name, then department, then class
+        reports.sort(Comparator.comparing(MarksheetReportDTO::getSubject)
+                .thenComparing(MarksheetReportDTO::getDepartment)
+                .thenComparing(MarksheetReportDTO::getClassName));
 
         return reports;
     }

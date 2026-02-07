@@ -298,11 +298,15 @@ public class SeatingArrangementController {
     public ResponseEntity<byte[]> downloadMarksheetExcel(
             @RequestParam String subject,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "3") int blankColumns) {
+            @RequestParam(defaultValue = "3") int blankColumns,
+            @RequestParam(required = false) String department,
+            @RequestParam(required = false) String className) {
         try {
             List<MarksheetReportDTO> reports = seatingService.getMarksheetReports(date);
             MarksheetReportDTO report = reports.stream()
                     .filter(r -> r.getSubject().equals(subject))
+                    .filter(r -> department == null || r.getDepartment().equals(department))
+                    .filter(r -> className == null || r.getClassName().equals(className))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Report not found for subject " + subject));
 

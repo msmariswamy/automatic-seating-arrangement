@@ -626,6 +626,8 @@
 
                     reports.forEach(report => {
                         let escapedSubject = report.subject.replace(/'/g, "\\'");
+                        let escapedDept = report.department.replace(/'/g, "\\'");
+                        let escapedClass = report.className.replace(/'/g, "\\'");
                         html += `
                             <tr>
                                 <td>${report.subject}</td>
@@ -633,7 +635,7 @@
                                 <td>${report.className}</td>
                                 <td><strong>${report.totalStudents}</strong></td>
                                 <td>
-                                    <button class="btn btn-sm btn-primary" onclick="downloadMarksheetExcel('${escapedSubject}', '${date}')">
+                                    <button class="btn btn-sm btn-primary" onclick="downloadMarksheetExcel('${escapedSubject}', '${date}', '${escapedDept}', '${escapedClass}')">
                                         <i class="fas fa-file-excel"></i> Download Excel
                                     </button>
                                 </td>
@@ -729,9 +731,12 @@
             triggerDownload(`/api/seating/reports/junior-supervisor/all/excel?date=${date}&showAnswerSheetCol=${showAnswerSheetCol}&showSupplementsCol=${showSupplementsCol}`);
         }
 
-        function downloadMarksheetExcel(subject, date) {
+        function downloadMarksheetExcel(subject, date, department, className) {
             let blankColumns = parseInt($('#blankColumnsInput').val(), 10) || 3;
-            triggerDownload(`/api/seating/reports/marksheet/excel?subject=${encodeURIComponent(subject)}&date=${date}&blankColumns=${blankColumns}`);
+            let url = `/api/seating/reports/marksheet/excel?subject=${encodeURIComponent(subject)}&date=${date}&blankColumns=${blankColumns}`;
+            if (department) url += `&department=${encodeURIComponent(department)}`;
+            if (className) url += `&className=${encodeURIComponent(className)}`;
+            triggerDownload(url);
         }
 
         function downloadAllMarksheetExcel() {
