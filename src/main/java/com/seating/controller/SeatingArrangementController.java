@@ -7,7 +7,7 @@ import com.seating.dto.JuniorSupervisorReportDTO;
 import com.seating.dto.MarksheetReportDTO;
 import com.seating.dto.RoomReportDTO;
 import com.seating.dto.SeatingFilterDTO;
-import com.seating.service.PdfService;
+import com.seating.service.ReportExcelService;
 import com.seating.service.SeatingArrangementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,8 +34,11 @@ import java.util.Map;
 @Slf4j
 public class SeatingArrangementController {
 
+    private static final MediaType EXCEL_MEDIA_TYPE = MediaType.parseMediaType(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
     private final SeatingArrangementService seatingService;
-    private final PdfService pdfService;
+    private final ReportExcelService reportExcelService;
     private final ReportConfig reportConfig;
 
     @PostMapping("/generate")
@@ -106,12 +109,11 @@ public class SeatingArrangementController {
         }
     }
 
-    @GetMapping("/reports/room/pdf")
+    @GetMapping("/reports/room/excel")
     @ResponseBody
-    public ResponseEntity<byte[]> downloadRoomPdf(
+    public ResponseEntity<byte[]> downloadRoomExcel(
             @RequestParam String roomNo,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "10") String fontSize) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         try {
             List<RoomReportDTO> reports = seatingService.getRoomReports(date);
             RoomReportDTO roomReport = reports.stream()
@@ -119,59 +121,76 @@ public class SeatingArrangementController {
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Room not found in reports"));
 
-            byte[] pdfData = pdfService.generateRoomReportPdf(roomReport, date, fontSize);
+            byte[] excelData = reportExcelService.generateRoomReportExcel(roomReport, date);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentDispositionFormData("attachment", "room_" + roomNo + "_report.pdf");
+            headers.setContentType(EXCEL_MEDIA_TYPE);
+            headers.setContentDispositionFormData("attachment", "room_" + roomNo + "_report.xlsx");
 
-            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+            return new ResponseEntity<>(excelData, headers, HttpStatus.OK);
 
         } catch (Exception e) {
-            log.error("Error generating PDF: {}", e.getMessage(), e);
+            log.error("Error generating room Excel: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
-    @GetMapping("/reports/consolidated/pdf")
+    @GetMapping("/reports/consolidated/excel")
     @ResponseBody
-    public ResponseEntity<byte[]> downloadConsolidatedPdf(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "10") String fontSize) {
+    public ResponseEntity<byte[]> downloadConsolidatedExcel(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         try {
             List<ConsolidatedReportDTO> report = seatingService.getConsolidatedReport(date);
-            byte[] pdfData = pdfService.generateConsolidatedReportPdf(report, date, fontSize);
+            byte[] excelData = reportExcelService.generateConsolidatedReportExcel(report, date);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentDispositionFormData("attachment", "consolidated_report_" + date + ".pdf");
+            headers.setContentType(EXCEL_MEDIA_TYPE);
+            headers.setContentDispositionFormData("attachment", "consolidated_report_" + date + ".xlsx");
 
-            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+            return new ResponseEntity<>(excelData, headers, HttpStatus.OK);
 
         } catch (Exception e) {
-            log.error("Error generating consolidated PDF: {}", e.getMessage(), e);
+            log.error("Error generating consolidated Excel: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
-    @GetMapping("/reports/all-rooms/pdf")
+    @GetMapping("/reports/all-rooms/excel")
     @ResponseBody
-    public ResponseEntity<byte[]> downloadAllRoomsPdf(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "10") String fontSize) {
+    public ResponseEntity<byte[]> downloadAllRoomsExcel(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         try {
             List<RoomReportDTO> reports = seatingService.getRoomReports(date);
-
-            byte[] pdfData = pdfService.generateMergedRoomReportsPdf(reports, date, fontSize);
+            byte[] excelData = reportExcelService.generateAllRoomsReportExcel(reports, date);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentDispositionFormData("attachment", "all_rooms_report_" + date + ".pdf");
+            headers.setContentType(EXCEL_MEDIA_TYPE);
+            headers.setContentDispositionFormData("attachment", "all_rooms_report_" + date + ".xlsx");
 
-            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+            return new ResponseEntity<>(excelData, headers, HttpStatus.OK);
 
         } catch (Exception e) {
-            log.error("Error generating merged PDF: {}", e.getMessage(), e);
+            log.error("Error generating all rooms Excel: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reports/department-consolidated/excel")
+    @ResponseBody
+    public ResponseEntity<byte[]> downloadDepartmentConsolidatedExcel(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        try {
+            List<DepartmentConsolidatedReportDTO> report = seatingService.getDepartmentConsolidatedReport(date);
+            byte[] excelData = reportExcelService.generateDepartmentConsolidatedReportExcel(report, date);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(EXCEL_MEDIA_TYPE);
+            headers.setContentDispositionFormData("attachment", "department_consolidated_report_" + date + ".xlsx");
+
+            return new ResponseEntity<>(excelData, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Error generating department consolidated Excel: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -201,13 +220,12 @@ public class SeatingArrangementController {
         }
     }
 
-    @GetMapping("/reports/junior-supervisor/pdf")
+    @GetMapping("/reports/junior-supervisor/excel")
     @ResponseBody
-    public ResponseEntity<byte[]> downloadJuniorSupervisorPdf(
+    public ResponseEntity<byte[]> downloadJuniorSupervisorExcel(
             @RequestParam String roomNo,
             @RequestParam String subject,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "10") String fontSize,
             @RequestParam(defaultValue = "true") boolean showAnswerSheetCol,
             @RequestParam(defaultValue = "true") boolean showSupplementsCol) {
         try {
@@ -217,40 +235,39 @@ public class SeatingArrangementController {
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Report not found for room " + roomNo + " and subject " + subject));
 
-            byte[] pdfData = pdfService.generateJuniorSupervisorReportPdf(report, date, fontSize, showAnswerSheetCol, showSupplementsCol);
+            byte[] excelData = reportExcelService.generateJuniorSupervisorReportExcel(report, date, showAnswerSheetCol, showSupplementsCol);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            String filename = "jr_supervisor_" + roomNo + "_" + subject.replaceAll("[^a-zA-Z0-9]", "_") + ".pdf";
+            headers.setContentType(EXCEL_MEDIA_TYPE);
+            String filename = "jr_supervisor_" + roomNo + "_" + subject.replaceAll("[^a-zA-Z0-9]", "_") + ".xlsx";
             headers.setContentDispositionFormData("attachment", filename);
 
-            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+            return new ResponseEntity<>(excelData, headers, HttpStatus.OK);
 
         } catch (Exception e) {
-            log.error("Error generating Junior Supervisor PDF: {}", e.getMessage(), e);
+            log.error("Error generating Junior Supervisor Excel: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
-    @GetMapping("/reports/junior-supervisor/all/pdf")
+    @GetMapping("/reports/junior-supervisor/all/excel")
     @ResponseBody
-    public ResponseEntity<byte[]> downloadAllJuniorSupervisorPdfs(
+    public ResponseEntity<byte[]> downloadAllJuniorSupervisorExcel(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "10") String fontSize,
             @RequestParam(defaultValue = "true") boolean showAnswerSheetCol,
             @RequestParam(defaultValue = "true") boolean showSupplementsCol) {
         try {
             List<JuniorSupervisorReportDTO> reports = seatingService.getJuniorSupervisorReports(date);
-            byte[] pdfData = pdfService.generateAllJuniorSupervisorReportsPdf(reports, date, fontSize, showAnswerSheetCol, showSupplementsCol);
+            byte[] excelData = reportExcelService.generateAllJuniorSupervisorReportExcel(reports, date, showAnswerSheetCol, showSupplementsCol);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentDispositionFormData("attachment", "all_junior_supervisor_reports_" + date + ".pdf");
+            headers.setContentType(EXCEL_MEDIA_TYPE);
+            headers.setContentDispositionFormData("attachment", "all_junior_supervisor_reports_" + date + ".xlsx");
 
-            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+            return new ResponseEntity<>(excelData, headers, HttpStatus.OK);
 
         } catch (Exception e) {
-            log.error("Error generating all Junior Supervisor PDFs: {}", e.getMessage(), e);
+            log.error("Error generating all Junior Supervisor Excel: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -268,12 +285,11 @@ public class SeatingArrangementController {
         }
     }
 
-    @GetMapping("/reports/marksheet/pdf")
+    @GetMapping("/reports/marksheet/excel")
     @ResponseBody
-    public ResponseEntity<byte[]> downloadMarksheetPdf(
+    public ResponseEntity<byte[]> downloadMarksheetExcel(
             @RequestParam String subject,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "10") String fontSize,
             @RequestParam(defaultValue = "3") int blankColumns) {
         try {
             List<MarksheetReportDTO> reports = seatingService.getMarksheetReports(date);
@@ -282,39 +298,38 @@ public class SeatingArrangementController {
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Report not found for subject " + subject));
 
-            byte[] pdfData = pdfService.generateMarksheetPdf(report, date, fontSize, blankColumns);
+            byte[] excelData = reportExcelService.generateMarksheetReportExcel(report, date, blankColumns);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            String filename = "marksheet_" + subject.replaceAll("[^a-zA-Z0-9]", "_") + ".pdf";
+            headers.setContentType(EXCEL_MEDIA_TYPE);
+            String filename = "marksheet_" + subject.replaceAll("[^a-zA-Z0-9]", "_") + ".xlsx";
             headers.setContentDispositionFormData("attachment", filename);
 
-            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+            return new ResponseEntity<>(excelData, headers, HttpStatus.OK);
 
         } catch (Exception e) {
-            log.error("Error generating Marksheet PDF: {}", e.getMessage(), e);
+            log.error("Error generating Marksheet Excel: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
-    @GetMapping("/reports/marksheet/all/pdf")
+    @GetMapping("/reports/marksheet/all/excel")
     @ResponseBody
-    public ResponseEntity<byte[]> downloadAllMarksheetPdfs(
+    public ResponseEntity<byte[]> downloadAllMarksheetExcel(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "10") String fontSize,
             @RequestParam(defaultValue = "3") int blankColumns) {
         try {
             List<MarksheetReportDTO> reports = seatingService.getMarksheetReports(date);
-            byte[] pdfData = pdfService.generateAllMarksheetPdfs(reports, date, fontSize, blankColumns);
+            byte[] excelData = reportExcelService.generateAllMarksheetReportExcel(reports, date, blankColumns);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentDispositionFormData("attachment", "all_marksheets_" + date + ".pdf");
+            headers.setContentType(EXCEL_MEDIA_TYPE);
+            headers.setContentDispositionFormData("attachment", "all_marksheets_" + date + ".xlsx");
 
-            return new ResponseEntity<>(pdfData, headers, HttpStatus.OK);
+            return new ResponseEntity<>(excelData, headers, HttpStatus.OK);
 
         } catch (Exception e) {
-            log.error("Error generating all Marksheet PDFs: {}", e.getMessage(), e);
+            log.error("Error generating all Marksheet Excel: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
