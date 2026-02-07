@@ -10,7 +10,6 @@ Automatic Seating Arrangement System - A Spring Boot web application for managin
 - **Backend:** Java 21, Spring Boot 3.2.2
 - **Database:** PostgreSQL 15+
 - **Excel Processing:** Apache POI 5.2.5
-- **PDF Generation:** iText 5.5.13.3
 - **Frontend:** Thymeleaf, Bootstrap 5, jQuery 3.7
 - **Build Tool:** Gradle 8.11.1
 - **Lombok:** 1.18.34 (required for Java 21+ compatibility)
@@ -49,7 +48,7 @@ java -jar build/libs/automatic-seating-arrangement-1.0.0.jar
 
 ### Access Application
 - URL: http://localhost:8080
-- Default credentials: admin/admin123
+- No authentication required
 
 ## Database Setup
 
@@ -252,7 +251,7 @@ Seat (1) → (M) SeatingArrangement
 - `service/` - Business logic layer:
   - `SeatingArrangementService` - Core allocation algorithm
   - `ExcelService` - Apache POI for Excel template generation and parsing
-  - `PdfService` - iText for PDF report generation
+  - `ExcelService` - Apache POI for report generation (Consolidated, Department, Room, Junior Supervisor, Marksheet)
   - `StudentService` - Student management with multi-subject support
   - `RoomService` - Room and seat management
 - `dto/` - Data Transfer Objects for API responses and filtering
@@ -285,7 +284,14 @@ Thymeleaf templates in `src/main/resources/templates/`:
 - `POST /api/seating/generate` - Generate seating arrangement (requires SeatingFilterDTO)
 - `GET /api/seating/reports/consolidated` - Get department-wise summary by room
 - `GET /api/seating/reports/rooms` - Get detailed room reports
-- `GET /api/seating/reports/room/pdf?roomNo={roomNo}&date={date}` - Download room PDF
+- `GET /api/seating/reports/room/excel?roomNo={roomNo}&date={date}` - Download room Excel
+- `GET /api/seating/reports/consolidated/excel?date={date}` - Download consolidated Excel
+- `GET /api/seating/reports/all-rooms/excel?date={date}` - Download all rooms Excel (merged)
+- `GET /api/seating/reports/department-consolidated/excel?date={date}` - Download department consolidated Excel
+- `GET /api/seating/reports/junior-supervisor/excel?roomNo={roomNo}&subject={subject}&date={date}` - Download junior supervisor Excel
+- `GET /api/seating/reports/junior-supervisor/all/excel?date={date}` - Download all junior supervisor Excel (merged)
+- `GET /api/seating/reports/marksheet/excel?subject={subject}&date={date}` - Download marksheet Excel
+- `GET /api/seating/reports/marksheet/all/excel?date={date}` - Download all marksheet Excel (merged)
 - `GET /api/seating/dates` - Get all arrangement dates
 - `DELETE /api/seating?date={date}` - Delete arrangement by date
 
@@ -307,11 +313,14 @@ Thymeleaf templates in `src/main/resources/templates/`:
 
 ### Report Generation
 
-Two report types:
-1. **Consolidated Report**: Department-wise summary per room with seat ranges
-2. **Individual Room Reports**: Three-column layout (Right/Middle/Left) showing detailed allocations
+Reports are generated in Excel format with the following types:
+1. **Consolidated Report**: Department-wise summary per room with seat ranges (Room-wise)
+2. **Department Consolidated Report**: Department-wise summary grouped by department, class, and room
+3. **Individual Room Reports**: Three-column layout (Right/Middle/Left) showing detailed allocations - each room in a separate sheet
+4. **Junior Supervisor Reports**: Subject-wise, room-wise reports - each report in a separate sheet
+5. **Marksheet Reports**: Subject-wise reports with all students across all rooms - each subject in a separate sheet
 
-PDF generation uses iText 5.5.13 (older version, not iText 7).
+All Excel reports are generated using Apache POI.
 
 ### Security
 
@@ -342,7 +351,7 @@ This means only one arrangement can be "active" at a time, but historical arrang
 1. **Upload Students**: Download template → Fill data → Upload Excel
 2. **Upload Rooms**: Download template → Fill room configuration → Upload Excel
 3. **Generate Arrangement**: Select classes and subjects (subjects grouped by department, departments auto-determined) → Generate
-4. **View Reports**: Select date → View consolidated or individual room reports (displayed in room ID order) → Download PDFs as needed
+4. **View Reports**: Select date → View consolidated or individual room reports (displayed in room ID order) → Download Excel reports as needed
 5. **Delete Data**: Delete students/rooms/arrangements as needed to reset the system
 
 ## Troubleshooting
