@@ -164,11 +164,11 @@
                         <div class="mb-3">
                             <input type="file" class="form-control" id="studentFile" accept=".xlsx,.xls">
                         </div>
-                        <button onclick="uploadStudents()" class="btn btn-primary w-100">
+                        <button onclick="uploadStudents(this)" class="btn btn-primary w-100">
                             <i class="fas fa-upload"></i> Upload Students
                         </button>
                         <hr>
-                        <button onclick="deleteStudents()" class="btn btn-danger btn-sm w-100">
+                        <button onclick="deleteStudents(this)" class="btn btn-danger btn-sm w-100">
                             <i class="fas fa-trash"></i> Clear All Students
                         </button>
                     </div>
@@ -191,11 +191,11 @@
                         <div class="mb-3">
                             <input type="file" class="form-control" id="roomFile" accept=".xlsx,.xls">
                         </div>
-                        <button onclick="uploadRooms()" class="btn btn-primary w-100">
+                        <button onclick="uploadRooms(this)" class="btn btn-primary w-100">
                             <i class="fas fa-upload"></i> Upload Rooms
                         </button>
                         <hr>
-                        <button onclick="deleteRooms()" class="btn btn-danger btn-sm w-100">
+                        <button onclick="deleteRooms(this)" class="btn btn-danger btn-sm w-100">
                             <i class="fas fa-trash"></i> Clear All Rooms
                         </button>
                     </div>
@@ -232,16 +232,36 @@
                         </div>
                     </div>
                     <div class="text-center mt-4">
-                        <button onclick="generateSeating()" class="btn btn-primary btn-lg px-5">
+                        <button onclick="generateSeating(this)" class="btn btn-primary btn-lg px-5">
                             <i class="fas fa-magic"></i> Generate Seating Arrangement
                         </button>
                     </div>
                     <hr>
                     <div class="text-center">
-                        <button onclick="deleteSeatingArrangements()" class="btn btn-danger btn-sm">
+                        <button onclick="deleteSeatingArrangements(this)" class="btn btn-danger btn-sm">
                             <i class="fas fa-trash"></i> Clear All Seating Arrangements
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;"></div>
+
+    <!-- Confirm Modal -->
+    <div class="modal fade" id="confirmModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 15px; border: none;">
+                <div class="modal-header" style="border-bottom: 1px solid #eee;">
+                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle text-warning me-2"></i>Confirm Action</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="confirmModalBody" style="padding: 24px; font-size: 1.05rem;"></div>
+                <div class="modal-footer" style="border-top: 1px solid #eee;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmModalBtn">Confirm</button>
                 </div>
             </div>
         </div>
@@ -257,6 +277,58 @@
             loadStatistics();
             loadFilters();
         });
+
+        // ===== Toast & Confirm Helpers =====
+
+        function showToast(message, type) {
+            type = type || 'info';
+            let bgClass = 'bg-info';
+            let icon = 'fa-info-circle';
+            if (type === 'success') { bgClass = 'bg-success'; icon = 'fa-check-circle'; }
+            else if (type === 'error') { bgClass = 'bg-danger'; icon = 'fa-exclamation-circle'; }
+            else if (type === 'warning') { bgClass = 'bg-warning text-dark'; icon = 'fa-exclamation-triangle'; }
+
+            let toastHtml = `
+                <div class="toast align-items-center text-white ${bgClass} border-0" role="alert">
+                    <div class="d-flex">
+                        <div class="toast-body"><i class="fas ${icon} me-2"></i>${message}</div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                </div>`;
+
+            let container = document.querySelector('.toast-container');
+            container.insertAdjacentHTML('beforeend', toastHtml);
+            let toastEl = container.lastElementChild;
+            let toast = new bootstrap.Toast(toastEl, { delay: 5000 });
+            toast.show();
+            toastEl.addEventListener('hidden.bs.toast', function() { toastEl.remove(); });
+        }
+
+        let confirmCallback = null;
+        function showConfirm(message, onConfirm) {
+            document.getElementById('confirmModalBody').textContent = message;
+            confirmCallback = onConfirm;
+            new bootstrap.Modal(document.getElementById('confirmModal')).show();
+        }
+        document.getElementById('confirmModalBtn').addEventListener('click', function() {
+            bootstrap.Modal.getInstance(document.getElementById('confirmModal')).hide();
+            if (confirmCallback) confirmCallback();
+            confirmCallback = null;
+        });
+
+        function setButtonLoading(btn, loading) {
+            if (!btn) return;
+            if (loading) {
+                btn.disabled = true;
+                btn.dataset.originalHtml = btn.innerHTML;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Please wait...';
+            } else {
+                btn.disabled = false;
+                if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
+            }
+        }
+
+        // ===== Data Loading =====
 
         function loadStatistics() {
             $.get('/api/students/count', function(data) {
@@ -318,13 +390,16 @@
             $('#subjectCheckboxes').html(html);
         }
 
-        function uploadStudents() {
+        // ===== Actions =====
+
+        function uploadStudents(btn) {
             let fileInput = document.getElementById('studentFile');
             if (!fileInput.files.length) {
-                alert('Please select a file');
+                showToast('Please select a file', 'warning');
                 return;
             }
 
+            setButtonLoading(btn, true);
             let formData = new FormData();
             formData.append('file', fileInput.files[0]);
 
@@ -335,24 +410,28 @@
                 processData: false,
                 contentType: false,
                 success: function(response) {
-                    alert(response.message);
+                    showToast(response.message, 'success');
                     loadStatistics();
                     loadFilters();
                     fileInput.value = '';
                 },
                 error: function(xhr) {
-                    alert('Error: ' + (xhr.responseJSON?.message || 'Upload failed'));
+                    showToast('Error: ' + (xhr.responseJSON?.message || 'Upload failed'), 'error');
+                },
+                complete: function() {
+                    setButtonLoading(btn, false);
                 }
             });
         }
 
-        function uploadRooms() {
+        function uploadRooms(btn) {
             let fileInput = document.getElementById('roomFile');
             if (!fileInput.files.length) {
-                alert('Please select a file');
+                showToast('Please select a file', 'warning');
                 return;
             }
 
+            setButtonLoading(btn, true);
             let formData = new FormData();
             formData.append('file', fileInput.files[0]);
 
@@ -363,17 +442,20 @@
                 processData: false,
                 contentType: false,
                 success: function(response) {
-                    alert(response.message);
+                    showToast(response.message, 'success');
                     loadStatistics();
                     fileInput.value = '';
                 },
                 error: function(xhr) {
-                    alert('Error: ' + (xhr.responseJSON?.message || 'Upload failed'));
+                    showToast('Error: ' + (xhr.responseJSON?.message || 'Upload failed'), 'error');
+                },
+                complete: function() {
+                    setButtonLoading(btn, false);
                 }
             });
         }
 
-        function generateSeating() {
+        function generateSeating(btn) {
             let classes = [];
             $('#classCheckboxes input:checked').each(function() {
                 classes.push($(this).val());
@@ -391,10 +473,11 @@
             });
 
             if (!classes.length || !subjects.length) {
-                alert('Please select classes and subjects');
+                showToast('Please select classes and subjects', 'warning');
                 return;
             }
 
+            setButtonLoading(btn, true);
             let filterData = {
                 departments: Array.from(departments),
                 classes: classes,
@@ -409,62 +492,79 @@
                 data: JSON.stringify(filterData),
                 success: function(response) {
                     if (response.success) {
-                        alert(`Success! Generated seating for ${response.totalStudents} students across ${response.roomsUsed} rooms`);
-                        window.location.href = '/api/seating/reports';
+                        showToast(`Success! Generated seating for ${response.totalStudents} students across ${response.roomsUsed} rooms`, 'success');
+                        setTimeout(function() {
+                            window.location.href = '/api/seating/reports';
+                        }, 1500);
                     }
                 },
                 error: function(xhr) {
-                    alert('Error: ' + (xhr.responseJSON?.message || 'Generation failed'));
+                    showToast('Error: ' + (xhr.responseJSON?.message || 'Generation failed'), 'error');
+                },
+                complete: function() {
+                    setButtonLoading(btn, false);
                 }
             });
         }
 
-        function deleteStudents() {
-            if (confirm('Are you sure you want to delete all students?')) {
+        function deleteStudents(btn) {
+            showConfirm('Are you sure you want to delete all students?', function() {
+                setButtonLoading(btn, true);
                 $.ajax({
                     url: '/api/students',
                     type: 'DELETE',
                     success: function(response) {
-                        alert(response.message);
+                        showToast(response.message, 'success');
                         loadStatistics();
                         loadFilters();
                     },
                     error: function(xhr) {
-                        alert('Error: ' + (xhr.responseJSON?.message || 'Delete failed'));
+                        showToast('Error: ' + (xhr.responseJSON?.message || 'Delete failed'), 'error');
+                    },
+                    complete: function() {
+                        setButtonLoading(btn, false);
                     }
                 });
-            }
+            });
         }
 
-        function deleteRooms() {
-            if (confirm('Are you sure you want to delete all rooms?')) {
+        function deleteRooms(btn) {
+            showConfirm('Are you sure you want to delete all rooms?', function() {
+                setButtonLoading(btn, true);
                 $.ajax({
                     url: '/api/rooms',
                     type: 'DELETE',
                     success: function(response) {
-                        alert(response.message);
+                        showToast(response.message, 'success');
                         loadStatistics();
                     },
                     error: function(xhr) {
-                        alert('Error: ' + (xhr.responseJSON?.message || 'Delete failed'));
+                        showToast('Error: ' + (xhr.responseJSON?.message || 'Delete failed'), 'error');
+                    },
+                    complete: function() {
+                        setButtonLoading(btn, false);
                     }
                 });
-            }
+            });
         }
 
-        function deleteSeatingArrangements() {
-            if (confirm('Are you sure you want to delete all seating arrangements?')) {
+        function deleteSeatingArrangements(btn) {
+            showConfirm('Are you sure you want to delete all seating arrangements?', function() {
+                setButtonLoading(btn, true);
                 $.ajax({
                     url: '/api/seating/all',
                     type: 'DELETE',
                     success: function(response) {
-                        alert(response.message);
+                        showToast(response.message, 'success');
                     },
                     error: function(xhr) {
-                        alert('Error: ' + (xhr.responseJSON?.message || 'Delete failed'));
+                        showToast('Error: ' + (xhr.responseJSON?.message || 'Delete failed'), 'error');
+                    },
+                    complete: function() {
+                        setButtonLoading(btn, false);
                     }
                 });
-            }
+            });
         }
 
         // Handle subject search functionality
