@@ -768,9 +768,12 @@ public class ReportExcelService {
                            CellStyle bold, CellStyle normal, CellStyle centered,
                            CellStyle centeredNoBorder, CellStyle centeredWrap) {}
 
+    private static final String FONT_NAME = "Times New Roman";
+
     private CellStyle createHeaderStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
+        font.setFontName(FONT_NAME);
         font.setBold(true);
         font.setFontHeightInPoints((short) 11);
         style.setFont(font);
@@ -788,47 +791,57 @@ public class ReportExcelService {
     private CellStyle createTitleStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
+        font.setFontName(FONT_NAME);
         font.setBold(true);
         font.setFontHeightInPoints((short) 14);
         style.setFont(font);
         style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
         return style;
     }
 
     private CellStyle createUnderlineTitleStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
+        font.setFontName(FONT_NAME);
         font.setBold(true);
         font.setUnderline(Font.U_SINGLE);
         font.setFontHeightInPoints((short) 14);
         style.setFont(font);
         style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
         return style;
     }
 
     private CellStyle createBoldStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
+        font.setFontName(FONT_NAME);
         font.setBold(true);
         font.setFontHeightInPoints((short) 10);
         style.setFont(font);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
         return style;
     }
 
     private CellStyle createNormalStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
+        font.setFontName(FONT_NAME);
         font.setFontHeightInPoints((short) 10);
         style.setFont(font);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
         return style;
     }
 
     private CellStyle createCenteredStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
+        font.setFontName(FONT_NAME);
         font.setFontHeightInPoints((short) 10);
         style.setFont(font);
         style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
         style.setBorderBottom(BorderStyle.THIN);
         style.setBorderTop(BorderStyle.THIN);
         style.setBorderRight(BorderStyle.THIN);
@@ -839,15 +852,18 @@ public class ReportExcelService {
     private CellStyle createCenteredNoBorderStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
+        font.setFontName(FONT_NAME);
         font.setFontHeightInPoints((short) 10);
         style.setFont(font);
         style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
         return style;
     }
 
     private CellStyle createCenteredWrapStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
+        font.setFontName(FONT_NAME);
         font.setFontHeightInPoints((short) 10);
         style.setFont(font);
         style.setAlignment(HorizontalAlignment.LEFT);
@@ -867,9 +883,12 @@ public class ReportExcelService {
                              CellStyle srNo, CellStyle seatNo, CellStyle bordered) {}
 
     private JsStyles createJsStyles(Workbook workbook) {
+        String fontName = "Times New Roman";
+
         // College name: size 18, center
         CellStyle collegeName = workbook.createCellStyle();
         Font collegeFont = workbook.createFont();
+        collegeFont.setFontName(fontName);
         collegeFont.setFontHeightInPoints((short) 18);
         collegeName.setFont(collegeFont);
         collegeName.setAlignment(HorizontalAlignment.CENTER);
@@ -878,6 +897,7 @@ public class ReportExcelService {
         // Affiliation: size 14, center
         CellStyle affiliation = workbook.createCellStyle();
         Font affFont = workbook.createFont();
+        affFont.setFontName(fontName);
         affFont.setFontHeightInPoints((short) 14);
         affiliation.setFont(affFont);
         affiliation.setAlignment(HorizontalAlignment.CENTER);
@@ -886,6 +906,7 @@ public class ReportExcelService {
         // Address: size 12, bold, center
         CellStyle address = workbook.createCellStyle();
         Font addrFont = workbook.createFont();
+        addrFont.setFontName(fontName);
         addrFont.setBold(true);
         addrFont.setFontHeightInPoints((short) 12);
         address.setFont(addrFont);
@@ -895,6 +916,7 @@ public class ReportExcelService {
         // Report title: size 14, bold, center
         CellStyle reportTitle = workbook.createCellStyle();
         Font titleFont = workbook.createFont();
+        titleFont.setFontName(fontName);
         titleFont.setBold(true);
         titleFont.setFontHeightInPoints((short) 14);
         reportTitle.setFont(titleFont);
@@ -904,6 +926,7 @@ public class ReportExcelService {
         // Field label: size 12, bold, left, vcenter
         CellStyle fieldLabel = workbook.createCellStyle();
         Font fieldFont = workbook.createFont();
+        fieldFont.setFontName(fontName);
         fieldFont.setBold(true);
         fieldFont.setFontHeightInPoints((short) 12);
         fieldLabel.setFont(fieldFont);
@@ -913,6 +936,7 @@ public class ReportExcelService {
         // Table header: size 9, bold, center, vcenter, wrap, thin borders
         CellStyle tableHeader = workbook.createCellStyle();
         Font thFont = workbook.createFont();
+        thFont.setFontName(fontName);
         thFont.setBold(true);
         thFont.setFontHeightInPoints((short) 9);
         tableHeader.setFont(thFont);
@@ -924,29 +948,37 @@ public class ReportExcelService {
         tableHeader.setBorderLeft(BorderStyle.THIN);
         tableHeader.setBorderRight(BorderStyle.THIN);
 
-        // Sr. No.: size 10, bold, thin borders
+        // Sr. No.: size 10, bold, thin borders, center
         CellStyle srNo = workbook.createCellStyle();
         Font srFont = workbook.createFont();
+        srFont.setFontName(fontName);
         srFont.setBold(true);
         srFont.setFontHeightInPoints((short) 10);
         srNo.setFont(srFont);
+        srNo.setVerticalAlignment(VerticalAlignment.CENTER);
         srNo.setBorderTop(BorderStyle.THIN);
         srNo.setBorderBottom(BorderStyle.THIN);
         srNo.setBorderLeft(BorderStyle.THIN);
         srNo.setBorderRight(BorderStyle.THIN);
 
-        // Seat No.: size 13, thin borders
+        // Seat No.: size 13, thin borders, center
         CellStyle seatNo = workbook.createCellStyle();
         Font seatFont = workbook.createFont();
+        seatFont.setFontName(fontName);
         seatFont.setFontHeightInPoints((short) 13);
         seatNo.setFont(seatFont);
+        seatNo.setVerticalAlignment(VerticalAlignment.CENTER);
         seatNo.setBorderTop(BorderStyle.THIN);
         seatNo.setBorderBottom(BorderStyle.THIN);
         seatNo.setBorderLeft(BorderStyle.THIN);
         seatNo.setBorderRight(BorderStyle.THIN);
 
-        // Bordered: thin borders (for empty signature cells)
+        // Bordered: thin borders, center (for empty signature cells)
         CellStyle bordered = workbook.createCellStyle();
+        Font borderedFont = workbook.createFont();
+        borderedFont.setFontName(fontName);
+        bordered.setFont(borderedFont);
+        bordered.setVerticalAlignment(VerticalAlignment.CENTER);
         bordered.setBorderTop(BorderStyle.THIN);
         bordered.setBorderBottom(BorderStyle.THIN);
         bordered.setBorderLeft(BorderStyle.THIN);
