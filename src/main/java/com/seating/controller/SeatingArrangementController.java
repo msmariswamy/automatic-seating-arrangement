@@ -232,8 +232,9 @@ public class SeatingArrangementController {
             @RequestParam String department,
             @RequestParam String className,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "true") boolean showAnswerSheetCol,
-            @RequestParam(defaultValue = "true") boolean showSupplementsCol) {
+            @RequestParam(defaultValue = "") String time,
+            @RequestParam(defaultValue = "") String sem,
+            @RequestParam(defaultValue = "") String examType) {
         try {
             List<JuniorSupervisorReportDTO> reports = seatingService.getJuniorSupervisorReports(date);
             JuniorSupervisorReportDTO report = reports.stream()
@@ -243,7 +244,7 @@ public class SeatingArrangementController {
                     .orElseThrow(() -> new IllegalArgumentException("Report not found for room " + roomNo
                             + ", subject " + subject + ", department " + department + ", class " + className));
 
-            byte[] excelData = reportExcelService.generateJuniorSupervisorReportExcel(report, date, showAnswerSheetCol, showSupplementsCol);
+            byte[] excelData = reportExcelService.generateJuniorSupervisorReportExcel(report, date, time, sem, examType);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(EXCEL_MEDIA_TYPE);
@@ -263,11 +264,12 @@ public class SeatingArrangementController {
     @ResponseBody
     public ResponseEntity<byte[]> downloadAllJuniorSupervisorExcel(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "true") boolean showAnswerSheetCol,
-            @RequestParam(defaultValue = "true") boolean showSupplementsCol) {
+            @RequestParam(defaultValue = "") String time,
+            @RequestParam(defaultValue = "") String sem,
+            @RequestParam(defaultValue = "") String examType) {
         try {
             List<JuniorSupervisorReportDTO> reports = seatingService.getJuniorSupervisorReports(date);
-            byte[] excelData = reportExcelService.generateAllJuniorSupervisorReportExcel(reports, date, showAnswerSheetCol, showSupplementsCol);
+            byte[] excelData = reportExcelService.generateAllJuniorSupervisorReportExcel(reports, date, time, sem, examType);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(EXCEL_MEDIA_TYPE);
