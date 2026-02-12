@@ -114,7 +114,7 @@ public class SeatingArrangementController {
     public ResponseEntity<byte[]> downloadRoomExcel(
             @RequestParam String roomNo,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "true") boolean showSubject) {
+            @RequestParam(defaultValue = "") String time) {
         try {
             List<RoomReportDTO> reports = seatingService.getRoomReports(date);
             RoomReportDTO roomReport = reports.stream()
@@ -122,7 +122,7 @@ public class SeatingArrangementController {
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Room not found in reports"));
 
-            byte[] excelData = reportExcelService.generateRoomReportExcel(roomReport, date, showSubject);
+            byte[] excelData = reportExcelService.generateRoomReportExcel(roomReport, date, time);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(EXCEL_MEDIA_TYPE);
@@ -161,10 +161,10 @@ public class SeatingArrangementController {
     @ResponseBody
     public ResponseEntity<byte[]> downloadAllRoomsExcel(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "true") boolean showSubject) {
+            @RequestParam(defaultValue = "") String time) {
         try {
             List<RoomReportDTO> reports = seatingService.getRoomReports(date);
-            byte[] excelData = reportExcelService.generateAllRoomsReportExcel(reports, date, showSubject);
+            byte[] excelData = reportExcelService.generateAllRoomsReportExcel(reports, date, time);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(EXCEL_MEDIA_TYPE);

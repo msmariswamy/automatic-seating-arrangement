@@ -213,21 +213,6 @@
             </div>
         </div>
 
-        <!-- Settings -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <i class="fas fa-cog"></i> Settings
-            </div>
-            <div class="card-body">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="showSubjectCheckbox" checked onchange="toggleSubjectColumn()">
-                    <label class="form-check-label" for="showSubjectCheckbox">
-                        Show Subject Column
-                    </label>
-                </div>
-            </div>
-        </div>
-
         <!-- Report Tabs -->
         <ul class="nav nav-tabs mb-4" id="reportTabs" role="tablist" style="display:none;">
             <li class="nav-item" role="presentation">
@@ -324,6 +309,19 @@
 
             <!-- Individual Room Reports -->
             <div class="tab-pane fade" id="rooms" role="tabpanel">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <i class="fas fa-cog"></i> Room Report Settings
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label for="roomExamTime" class="form-label fw-bold">Exam Time</label>
+                                <input type="text" class="form-control" id="roomExamTime" placeholder="e.g. 11:30 AM - 01:00 PM">
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="d-flex justify-content-between align-items-center mb-3" id="roomReportsHeader" style="display:none;">
                     <h5 class="mb-0">Individual Room Reports</h5>
                     <button class="btn btn-primary" onclick="downloadAllRoomsExcel(this)">
@@ -869,17 +867,6 @@
             `).join('');
         }
 
-        function toggleSubjectColumn() {
-            const showSubject = $('#showSubjectCheckbox').is(':checked');
-            const subjectColumns = $('.subject-column');
-
-            if (showSubject) {
-                subjectColumns.removeClass('hidden');
-            } else {
-                subjectColumns.addClass('hidden');
-            }
-        }
-
         // ===== Excel Download Functions =====
 
         function triggerDownload(url, btn) {
@@ -914,8 +901,8 @@
         }
 
         function downloadRoomExcel(roomNo, date, btn) {
-            let showSubject = $('#showSubjectCheckbox').is(':checked');
-            triggerDownload(`/api/seating/reports/room/excel?roomNo=${encodeURIComponent(roomNo)}&date=${date}&showSubject=${showSubject}`, btn);
+            let time = encodeURIComponent($('#roomExamTime').val());
+            triggerDownload(`/api/seating/reports/room/excel?roomNo=${encodeURIComponent(roomNo)}&date=${date}&time=${time}`, btn);
         }
 
         function downloadConsolidatedExcel(btn) {
@@ -935,8 +922,8 @@
         function downloadAllRoomsExcel(btn) {
             let date = $('#arrangementDate').val();
             if (!date) { showToast('Please select a date first', 'warning'); return; }
-            let showSubject = $('#showSubjectCheckbox').is(':checked');
-            triggerDownload(`/api/seating/reports/all-rooms/excel?date=${date}&showSubject=${showSubject}`, btn);
+            let time = encodeURIComponent($('#roomExamTime').val());
+            triggerDownload(`/api/seating/reports/all-rooms/excel?date=${date}&time=${time}`, btn);
         }
 
         function downloadJuniorSupervisorExcel(roomNo, subject, department, className, date, btn) {

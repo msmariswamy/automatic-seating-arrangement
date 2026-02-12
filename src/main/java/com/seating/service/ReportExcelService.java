@@ -24,137 +24,206 @@ public class ReportExcelService {
 
     // ===== Room Report =====
 
-    public byte[] generateRoomReportExcel(RoomReportDTO report, LocalDate date, boolean showSubject) throws IOException {
+    public byte[] generateRoomReportExcel(RoomReportDTO report, LocalDate date, String time) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
-            Styles styles = createStyles(workbook);
-            createRoomSheet(workbook, styles, report, date, showSubject);
+            RoomStyles rs = createRoomStyles(workbook);
+            createRoomSheet(workbook, rs, report, date, time);
             return toBytes(workbook);
         }
     }
 
-    public byte[] generateAllRoomsReportExcel(List<RoomReportDTO> reports, LocalDate date, boolean showSubject) throws IOException {
+    public byte[] generateAllRoomsReportExcel(List<RoomReportDTO> reports, LocalDate date, String time) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
-            Styles styles = createStyles(workbook);
+            RoomStyles rs = createRoomStyles(workbook);
             for (RoomReportDTO report : reports) {
-                createRoomSheet(workbook, styles, report, date, showSubject);
+                createRoomSheet(workbook, rs, report, date, time);
             }
             return toBytes(workbook);
         }
     }
 
-    private void createRoomSheet(Workbook workbook, Styles styles, RoomReportDTO report, LocalDate date, boolean showSubject) {
+    private void createRoomSheet(Workbook workbook, RoomStyles rs, RoomReportDTO report, LocalDate date, String time) {
         String sheetName = getUniqueSheetName(workbook, "Room " + report.getRoomNo());
         Sheet sheet = workbook.createSheet(sheetName);
 
-        // Column layout depends on showSubject
-        // Without subject: Seat,Roll | gap | Seat,Roll | gap | Seat,Roll  (cols per section=2, gap=1)
-        // With subject:    Seat,Roll,Subject | gap | Seat,Roll,Subject | gap | Seat,Roll,Subject
-        int colsPerSection = showSubject ? 3 : 2;
-        int sectionGap = 1;
-        int rOffset = 0;
-        int mOffset = colsPerSection + sectionGap;
-        int lOffset = 2 * (colsPerSection + sectionGap);
-        int totalCols = lOffset + colsPerSection;
+        List<SeatAllocationDTO> rSeats = report.getRightSeats() != null ? report.getRightSeats() : List.of();
+        List<SeatAllocationDTO> mSeats = report.getMiddleSeats() != null ? report.getMiddleSeats() : List.of();
+        List<SeatAllocationDTO> lSeats = report.getLeftSeats() != null ? report.getLeftSeats() : List.of();
+        boolean hasMiddle = !mSeats.isEmpty();
 
+        // Column layout: 2-section (5 cols) or 3-section (8 cols)
+        int rSeatCol = 0, rRollCol = 1, gapCol1 = 2;
+        int mSeatCol = -1, mRollCol = -1, gapCol2 = -1;
+        int lSeatCol, lRollCol, totalCols;
+
+        if (hasMiddle) {
+            mSeatCol = 3; mRollCol = 4; gapCol2 = 5;
+            lSeatCol = 6; lRollCol = 7;
+            totalCols = 8;
+        } else {
+            lSeatCol = 3; lRollCol = 4;
+            totalCols = 5;
+        }
+
+        // Set column widths
+        for (int i = 0; i < totalCols; i++) {
+            if (i == gapCol1 || i == gapCol2) {
+                sheet.setColumnWidth(i, (int) (3.0 * 256));
+            } else {
+                sheet.setColumnWidth(i, (int) (13.0 * 256));
+            }
+        }
+
+        int lastCol = totalCols - 1;
         int rowIdx = 0;
 
-        // College header
-        rowIdx = addCollegeHeader(sheet, rowIdx, styles, totalCols);
-
-        // Title
-        Row titleRow = sheet.createRow(rowIdx);
-        Cell titleCell = titleRow.createCell(0);
-        titleCell.setCellValue("Individual Room Report");
-        titleCell.setCellStyle(styles.title);
-        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, totalCols - 1));
-        rowIdx += 2;
-
-        // Room info
-        Row roomRow = sheet.createRow(rowIdx++);
-        createCell(roomRow, 0, "Room No: " + report.getRoomNo(), styles.bold);
-        createCell(roomRow, mOffset, "Date: " + date, styles.bold);
-
-        Row deptRow = sheet.createRow(rowIdx++);
-        createCell(deptRow, 0, "Departments: " + String.join(", ", report.getDepartments()), styles.normal);
-
-        Row subjRow = sheet.createRow(rowIdx++);
-        createCell(subjRow, 0, "Subjects: " + String.join(", ", report.getSubjects()), styles.normal);
-
-        rowIdx++; // blank row
-
-        // Section headers
-        Row sectionRow = sheet.createRow(rowIdx);
-        for (int c = rOffset; c < rOffset + colsPerSection; c++)
-            createCell(sectionRow, c, "", styles.header);
-        sectionRow.getCell(rOffset).setCellValue("Right Seats (R)");
-        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, rOffset, rOffset + colsPerSection - 1));
-
-        for (int c = mOffset; c < mOffset + colsPerSection; c++)
-            createCell(sectionRow, c, "", styles.header);
-        sectionRow.getCell(mOffset).setCellValue("Middle Seats (M)");
-        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, mOffset, mOffset + colsPerSection - 1));
-
-        for (int c = lOffset; c < lOffset + colsPerSection; c++)
-            createCell(sectionRow, c, "", styles.header);
-        sectionRow.getCell(lOffset).setCellValue("Left Seats (L)");
-        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, lOffset, lOffset + colsPerSection - 1));
+        // Row 1: College name
+        Row row1 = sheet.createRow(rowIdx);
+        createCell(row1, 0, reportConfig.getLine1() != null ? reportConfig.getLine1() : "", rs.bold13Center);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, lastCol));
         rowIdx++;
 
-        // Sub-headers
-        Row subHeaderRow = sheet.createRow(rowIdx++);
-        int[] offsets = {rOffset, mOffset, lOffset};
-        for (int offset : offsets) {
-            createCell(subHeaderRow, offset, "Seat", styles.header);
-            createCell(subHeaderRow, offset + 1, "Roll No", styles.header);
-            if (showSubject) {
-                createCell(subHeaderRow, offset + 2, "Subject", styles.header);
-            }
+        // Row 2: Affiliation
+        Row row2 = sheet.createRow(rowIdx);
+        createCell(row2, 0, reportConfig.getLine2() != null ? reportConfig.getLine2() : "", rs.bold13Center);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, lastCol));
+        rowIdx++;
+
+        // Row 3: blank
+        rowIdx++;
+
+        // Row 4: Report title
+        Row row4 = sheet.createRow(rowIdx);
+        createCell(row4, 0, "Individual Room Report", rs.bold13Center);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, lastCol));
+        rowIdx++;
+
+        // Row 5: blank
+        rowIdx++;
+
+        // Row 6: Room No + Exam Time (3-section: exam time at F6)
+        Row row6 = sheet.createRow(rowIdx);
+        createCell(row6, 0, "Room No: " + report.getRoomNo(), rs.bold13);
+        if (hasMiddle && time != null && !time.isEmpty()) {
+            createCell(row6, gapCol2, "Exam Time :- " + time, rs.bold13);
         }
+        rowIdx++;
+
+        // Row 7: Departments + Exam Time (2-section: exam time at D7)
+        Row row7 = sheet.createRow(rowIdx);
+        createCell(row7, 0, "Departments: " + String.join(", ", report.getDepartments()), rs.normal13);
+        if (!hasMiddle && time != null && !time.isEmpty()) {
+            createCell(row7, lSeatCol, "Exam Time :- " + time, rs.bold13);
+        }
+        rowIdx++;
+
+        // Row 8: blank
+        rowIdx++;
+
+        // Build section display rows (with inline department transition labels)
+        List<SectionRow> rItems = buildSectionRows(rSeats);
+        List<SectionRow> mItems = hasMiddle ? buildSectionRows(mSeats) : List.of();
+        List<SectionRow> lItems = buildSectionRows(lSeats);
+
+        // Row 9: Initial department labels per section
+        Row deptLabelRow = sheet.createRow(rowIdx);
+        String rDept = rSeats.isEmpty() ? "" : rSeats.get(0).getDepartment();
+        createCell(deptLabelRow, rSeatCol, rDept, rs.bold13Center);
+        createCell(deptLabelRow, rRollCol, "", rs.bold13Center);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, rSeatCol, rRollCol));
+
+        if (hasMiddle) {
+            String mDept = mSeats.isEmpty() ? "" : mSeats.get(0).getDepartment();
+            createCell(deptLabelRow, mSeatCol, mDept, rs.bold13Center);
+            createCell(deptLabelRow, mRollCol, "", rs.bold13Center);
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, mSeatCol, mRollCol));
+        }
+
+        String lDept = lSeats.isEmpty() ? "" : lSeats.get(0).getDepartment();
+        createCell(deptLabelRow, lSeatCol, lDept, rs.bold13Center);
+        createCell(deptLabelRow, lRollCol, "", rs.bold13Center);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, lSeatCol, lRollCol));
+        rowIdx++;
+
+        // Row 10: Position headers
+        Row posRow = sheet.createRow(rowIdx);
+        createCell(posRow, rSeatCol, "Right Seats (R)", rs.sectionHeader);
+        createCell(posRow, rRollCol, "", rs.sectionHeader);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, rSeatCol, rRollCol));
+
+        if (hasMiddle) {
+            createCell(posRow, mSeatCol, "Middle Seats (M)", rs.sectionHeader);
+            createCell(posRow, mRollCol, "", rs.sectionHeader);
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, mSeatCol, mRollCol));
+        }
+
+        createCell(posRow, lSeatCol, "Left Seats (L)", rs.sectionHeader);
+        createCell(posRow, lRollCol, "", rs.sectionHeader);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, lSeatCol, lRollCol));
+        rowIdx++;
+
+        // Row 11: Column headers (Seat / Roll No)
+        Row colHdrRow = sheet.createRow(rowIdx);
+        createCell(colHdrRow, rSeatCol, "Seat", rs.colHeader);
+        createCell(colHdrRow, rRollCol, "Roll No", rs.colHeader);
+        if (hasMiddle) {
+            createCell(colHdrRow, mSeatCol, "Seat", rs.colHeader);
+            createCell(colHdrRow, mRollCol, "Roll No", rs.colHeader);
+        }
+        createCell(colHdrRow, lSeatCol, "Seat", rs.colHeader);
+        createCell(colHdrRow, lRollCol, "Roll No", rs.colHeader);
+        rowIdx++;
 
         // Data rows
-        int rightSize = report.getRightSeats() != null ? report.getRightSeats().size() : 0;
-        int middleSize = report.getMiddleSeats() != null ? report.getMiddleSeats().size() : 0;
-        int leftSize = report.getLeftSeats() != null ? report.getLeftSeats().size() : 0;
-        int maxRows = Math.max(Math.max(rightSize, middleSize), leftSize);
+        int maxItems = Math.max(rItems.size(), Math.max(mItems.size(), lItems.size()));
 
-        for (int i = 0; i < maxRows; i++) {
-            Row dataRow = sheet.createRow(rowIdx + i);
-
-            // Right seats
-            Cell rSeat = createCell(dataRow, rOffset, "", styles.centered);
-            Cell rRoll = createCell(dataRow, rOffset + 1, "", styles.centered);
-            Cell rSubj = showSubject ? createCell(dataRow, rOffset + 2, "", styles.centered) : null;
-            if (i < rightSize) {
-                SeatAllocationDTO seat = report.getRightSeats().get(i);
-                rSeat.setCellValue(seat.getSeatNo());
-                rRoll.setCellValue(seat.getRollNo());
-                if (rSubj != null && seat.getSubject() != null) rSubj.setCellValue(seat.getSubject());
+        for (int i = 0; i < maxItems; i++) {
+            Row dataRow = sheet.createRow(rowIdx);
+            writeSectionCell(sheet, dataRow, rowIdx, rSeatCol, rRollCol, i, rItems, rs);
+            if (hasMiddle) {
+                writeSectionCell(sheet, dataRow, rowIdx, mSeatCol, mRollCol, i, mItems, rs);
             }
-
-            // Middle seats
-            Cell mSeat = createCell(dataRow, mOffset, "", styles.centered);
-            Cell mRoll = createCell(dataRow, mOffset + 1, "", styles.centered);
-            Cell mSubj = showSubject ? createCell(dataRow, mOffset + 2, "", styles.centered) : null;
-            if (i < middleSize) {
-                SeatAllocationDTO seat = report.getMiddleSeats().get(i);
-                mSeat.setCellValue(seat.getSeatNo());
-                mRoll.setCellValue(seat.getRollNo());
-                if (mSubj != null && seat.getSubject() != null) mSubj.setCellValue(seat.getSubject());
-            }
-
-            // Left seats
-            Cell lSeat = createCell(dataRow, lOffset, "", styles.centered);
-            Cell lRoll = createCell(dataRow, lOffset + 1, "", styles.centered);
-            Cell lSubj = showSubject ? createCell(dataRow, lOffset + 2, "", styles.centered) : null;
-            if (i < leftSize) {
-                SeatAllocationDTO seat = report.getLeftSeats().get(i);
-                lSeat.setCellValue(seat.getSeatNo());
-                lRoll.setCellValue(seat.getRollNo());
-                if (lSubj != null && seat.getSubject() != null) lSubj.setCellValue(seat.getSubject());
-            }
+            writeSectionCell(sheet, dataRow, rowIdx, lSeatCol, lRollCol, i, lItems, rs);
+            rowIdx++;
         }
+    }
 
-        autoSizeColumns(sheet, totalCols);
+    private void writeSectionCell(Sheet sheet, Row row, int rowIdx, int seatCol, int rollCol,
+                                  int itemIdx, List<SectionRow> items, RoomStyles rs) {
+        if (itemIdx < items.size()) {
+            SectionRow sr = items.get(itemIdx);
+            if (sr.isLabel()) {
+                createCell(row, seatCol, sr.deptLabel(), rs.deptLabel);
+                createCell(row, rollCol, "", rs.deptLabel);
+                sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, seatCol, rollCol));
+            } else {
+                createCell(row, seatCol, sr.seatNo(), rs.data);
+                createCell(row, rollCol, sr.rollNo(), rs.data);
+            }
+        } else {
+            createCell(row, seatCol, "", rs.data);
+            createCell(row, rollCol, "", rs.data);
+        }
+    }
+
+    private record SectionRow(String seatNo, String rollNo, String deptLabel) {
+        boolean isLabel() { return deptLabel != null; }
+        static SectionRow data(String seatNo, String rollNo) { return new SectionRow(seatNo, rollNo, null); }
+        static SectionRow label(String dept) { return new SectionRow(null, null, dept); }
+    }
+
+    private List<SectionRow> buildSectionRows(List<SeatAllocationDTO> seats) {
+        List<SectionRow> items = new ArrayList<>();
+        if (seats.isEmpty()) return items;
+        String currentDept = seats.get(0).getDepartment();
+        for (SeatAllocationDTO seat : seats) {
+            if (!seat.getDepartment().equals(currentDept)) {
+                items.add(SectionRow.label(seat.getDepartment()));
+                currentDept = seat.getDepartment();
+            }
+            items.add(SectionRow.data(seat.getSeatNo(), seat.getRollNo()));
+        }
+        return items;
     }
 
     // ===== Consolidated Report =====
@@ -874,6 +943,64 @@ public class ReportExcelService {
         style.setBorderRight(BorderStyle.THIN);
         style.setBorderLeft(BorderStyle.THIN);
         return style;
+    }
+
+    // ===== Room Report Styles =====
+
+    private record RoomStyles(CellStyle bold13, CellStyle bold13Center, CellStyle normal13,
+                               CellStyle sectionHeader, CellStyle colHeader,
+                               CellStyle data, CellStyle deptLabel) {}
+
+    private RoomStyles createRoomStyles(Workbook workbook) {
+        Font bold13Font = workbook.createFont();
+        bold13Font.setFontName(FONT_NAME);
+        bold13Font.setBold(true);
+        bold13Font.setFontHeightInPoints((short) 13);
+
+        Font normal13Font = workbook.createFont();
+        normal13Font.setFontName(FONT_NAME);
+        normal13Font.setFontHeightInPoints((short) 13);
+
+        CellStyle bold13 = workbook.createCellStyle();
+        bold13.setFont(bold13Font);
+
+        CellStyle bold13Center = workbook.createCellStyle();
+        bold13Center.setFont(bold13Font);
+        bold13Center.setAlignment(HorizontalAlignment.CENTER);
+
+        CellStyle normal13 = workbook.createCellStyle();
+        normal13.setFont(normal13Font);
+
+        CellStyle sectionHeader = workbook.createCellStyle();
+        sectionHeader.setFont(bold13Font);
+        sectionHeader.setAlignment(HorizontalAlignment.CENTER);
+        sectionHeader.setVerticalAlignment(VerticalAlignment.CENTER);
+        addThinBorders(sectionHeader);
+
+        CellStyle colHeader = workbook.createCellStyle();
+        colHeader.setFont(bold13Font);
+        colHeader.setAlignment(HorizontalAlignment.CENTER);
+        colHeader.setVerticalAlignment(VerticalAlignment.CENTER);
+        addThinBorders(colHeader);
+
+        CellStyle data = workbook.createCellStyle();
+        data.setFont(normal13Font);
+        data.setAlignment(HorizontalAlignment.CENTER);
+        addThinBorders(data);
+
+        CellStyle deptLabel = workbook.createCellStyle();
+        deptLabel.setFont(bold13Font);
+        deptLabel.setAlignment(HorizontalAlignment.CENTER);
+        addThinBorders(deptLabel);
+
+        return new RoomStyles(bold13, bold13Center, normal13, sectionHeader, colHeader, data, deptLabel);
+    }
+
+    private void addThinBorders(CellStyle style) {
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
     }
 
     // ===== Junior Supervisor Styles =====
