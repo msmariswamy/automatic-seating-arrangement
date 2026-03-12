@@ -698,6 +698,164 @@ public class SeatingArrangementService {
         seatRepository.resetAllOccupiedSeats();
     }
 
+    /**
+     * Generate seating arrangement based on a Master Seating Excel configuration.
+     *
+     * Phase 1 – For each master row, seat students of the specified subject into
+     *           the specified room at the specified position (R or L).
+     * Phase 2 – Fill M seats automatically: each M seat takes students from
+     *           whichever subject (R or L on the same bench) has more students left.
+     */
+    @Transactional
+    public Map<String, Object> generateMasterSeatingArrangement(
+            List<MasterSeatingRowDTO> masterRows, String arrangementName) throws Exception {
+
+        if (masterRows == null || masterRows.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No master seating rows provided. Please upload a master seating file first.");
+        }
+
+        resetPreviousArrangement();
+
+        LocalDate today = LocalDate.now();
+        List<SeatingArrangement> arrangements = new ArrayList<>();
+
+        // Pre-load student queues for every subject mentioned in the master file
+        Set<String> allSubjects = masterRows.stream()
+                .map(MasterSeatingRowDTO::getSubjectName)
+                .collect(Collectors.toSet());
+
+        Map<String, Deque<Student>> subjectQueues = new HashMap<>();
+        for (String subject : allSubjects) {
+            List<Student> students = studentRepository.findUnallocatedBySubject(subject);
+            subjectQueues.put(subject, new ArrayDeque<>(students));
+            log.info("Master seating: subject '{}' → {} students available", subject, students.size());
+        }
+
+        // benchSubjectMap: roomId → benchNo → [rSubject, lSubject]
+        // Used in Phase 2 to decide which subject fills each M seat.
+        Map<Long, Map<Integer, String[]>> benchSubjectMap = new HashMap<>();
+
+        // Phase 1: allocate R and L seats from master rows
+        for (MasterSeatingRowDTO row : masterRows) {
+            Room room = roomRepository.findByRoomNo(row.getRoomNo())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Room not found: " + row.getRoomNo() +
+                            ". Make sure the room number matches an existing room."));
+
+            List<Seat> seats = seatRepository.findAvailableSeatsByRoomAndPosition(room, row.getPosition());
+            if (seats.isEmpty()) {
+                log.warn("No available {} seats in room {} — skipping row", row.getPosition(), row.getRoomNo());
+                continue;
+            }
+
+            Deque<Student> queue = subjectQueues.get(row.getSubjectName());
+            if (queue == null || queue.isEmpty()) {
+                log.warn("No students available for subject '{}' in room {} — skipping row",
+                        row.getSubjectName(), row.getRoomNo());
+                continue;
+            }
+
+            int allocated = 0;
+            int limit = row.getNoOfStudents();
+
+            for (Seat seat : seats) {
+                if (allocated >= limit || queue.isEmpty()) break;
+
+                Student student = queue.poll();
+
+                arrangements.add(SeatingArrangement.builder()
+                        .student(student)
+                        .room(room)
+                        .seat(seat)
+                        .subject(row.getSubjectName())
+                        .arrangementDate(today)
+                        .arrangementName(arrangementName)
+                        .build());
+
+                student.setIsAllocated(true);
+                seat.setIsOccupied(true);
+
+                // Track which subject is on R/L of this bench for Phase 2
+                benchSubjectMap
+                        .computeIfAbsent(room.getId(), k -> new HashMap<>())
+                        .computeIfAbsent(seat.getBenchNo(), k -> new String[2]);
+                String[] pair = benchSubjectMap.get(room.getId()).get(seat.getBenchNo());
+                if ("R".equals(row.getPosition())) pair[0] = row.getSubjectName();
+                else pair[1] = row.getSubjectName();
+
+                allocated++;
+            }
+
+            log.info("Master Phase 1: allocated {} students of '{}' to room {} ({})",
+                    allocated, row.getSubjectName(), row.getRoomNo(), row.getPosition());
+        }
+
+        // Phase 2: fill M seats
+        List<Seat> mSeats = seatRepository.findAvailableMSeats();
+        log.info("Master Phase 2: {} M seats to fill", mSeats.size());
+
+        for (Seat mSeat : mSeats) {
+            Long roomId = mSeat.getRoom().getId();
+            int benchNo = mSeat.getBenchNo();
+
+            String[] pair = benchSubjectMap
+                    .getOrDefault(roomId, Collections.emptyMap())
+                    .getOrDefault(benchNo, new String[2]);
+
+            String rSubject = pair[0];
+            String lSubject = pair[1];
+
+            String chosen = null;
+            if (rSubject != null && lSubject != null) {
+                int rCount = subjectQueues.getOrDefault(rSubject, new ArrayDeque<>()).size();
+                int lCount = subjectQueues.getOrDefault(lSubject, new ArrayDeque<>()).size();
+                chosen = (rCount >= lCount) ? rSubject : lSubject;
+            } else if (rSubject != null) {
+                chosen = rSubject;
+            } else if (lSubject != null) {
+                chosen = lSubject;
+            }
+
+            if (chosen != null) {
+                Deque<Student> queue = subjectQueues.get(chosen);
+                if (queue != null && !queue.isEmpty()) {
+                    Student student = queue.poll();
+                    arrangements.add(SeatingArrangement.builder()
+                            .student(student)
+                            .room(mSeat.getRoom())
+                            .seat(mSeat)
+                            .subject(chosen)
+                            .arrangementDate(today)
+                            .arrangementName(arrangementName)
+                            .build());
+                    student.setIsAllocated(true);
+                    mSeat.setIsOccupied(true);
+                }
+            }
+        }
+
+        if (arrangements.isEmpty()) {
+            throw new Exception(
+                    "No seating arrangements could be generated. " +
+                    "Check that room numbers match and students have the specified subjects.");
+        }
+
+        arrangementRepository.saveAll(arrangements);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("totalStudents", arrangements.size());
+        result.put("roomsUsed", arrangements.stream()
+                .map(a -> a.getRoom().getRoomNo()).distinct().count());
+        result.put("arrangementDate", today);
+        result.put("message", "Master seating arrangement generated successfully");
+
+        log.info("Master seating complete: {} students allocated across {} rooms",
+                arrangements.size(), result.get("roomsUsed"));
+
+        return result;
+    }
+
     @Transactional(readOnly = true)
     public List<ConsolidatedReportDTO> getConsolidatedReport(LocalDate date) {
         List<SeatingArrangement> arrangements = arrangementRepository.findByArrangementDateOrdered(date);

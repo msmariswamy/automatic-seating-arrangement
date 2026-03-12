@@ -1,5 +1,6 @@
 package com.seating.service;
 
+import com.seating.dto.MasterSeatingRowDTO;
 import com.seating.dto.RoomDTO;
 import com.seating.dto.StudentDTO;
 import lombok.extern.slf4j.Slf4j;
@@ -255,6 +256,125 @@ public class ExcelService {
 
         log.info("Parsed {} rooms from Excel file", rooms.size());
         return rooms;
+    }
+
+    /**
+     * Generate master seating template Excel file
+     */
+    public byte[] generateMasterTemplate() throws IOException {
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Master Seating");
+
+            Row headerRow = sheet.createRow(0);
+            CellStyle headerStyle = createHeaderStyle(workbook);
+
+            String[] headers = {"Department", "Room No", "No of Students", "Seated in L or R", "Subject Name"};
+            int[] colWidths = {5000, 3500, 4500, 5000, 8000};
+
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+                sheet.setColumnWidth(i, colWidths[i]);
+            }
+
+            // Sample row 1
+            Row sample1 = sheet.createRow(1);
+            sample1.createCell(0).setCellValue("IT");
+            sample1.createCell(1).setCellValue("101");
+            sample1.createCell(2).setCellValue(30);
+            sample1.createCell(3).setCellValue("L");
+            sample1.createCell(4).setCellValue("Data Structures");
+
+            // Sample row 2
+            Row sample2 = sheet.createRow(2);
+            sample2.createCell(0).setCellValue("CS");
+            sample2.createCell(1).setCellValue("102");
+            sample2.createCell(2).setCellValue(25);
+            sample2.createCell(3).setCellValue("R");
+            sample2.createCell(4).setCellValue("Operating Systems");
+
+            // Instructions sheet
+            Sheet instrSheet = workbook.createSheet("Instructions");
+            instrSheet.setColumnWidth(0, 18000);
+            String[] instructions = {
+                "Instructions for Master Seating Template:",
+                "",
+                "1. Department    : Department name of the students (e.g. IT, CS, ECE)",
+                "2. Room No       : Must match an existing room number in the system",
+                "3. No of Students: Number of students to seat in this room for the subject",
+                "4. Seated in L or R: Enter 'L' for Left seats or 'R' for Right seats only",
+                "5. Subject Name  : Must exactly match the subject name in the uploaded student data",
+                "",
+                "Notes:",
+                "- Each row defines one subject/position/room assignment",
+                "- Middle (M) seats are filled automatically based on whichever subject (R or L) has more students",
+                "- Multiple rows can target the same room (one for R and one for L)"
+            };
+            for (int i = 0; i < instructions.length; i++) {
+                instrSheet.createRow(i).createCell(0).setCellValue(instructions[i]);
+            }
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            workbook.write(outputStream);
+            return outputStream.toByteArray();
+        }
+    }
+
+    /**
+     * Parse master seating Excel file
+     */
+    public List<MasterSeatingRowDTO> parseMasterExcel(MultipartFile file) throws IOException {
+        List<MasterSeatingRowDTO> rows = new ArrayList<>();
+
+        try (InputStream inputStream = file.getInputStream();
+             Workbook workbook = WorkbookFactory.create(inputStream)) {
+
+            Sheet sheet = workbook.getSheet("Master Seating");
+            if (sheet == null) {
+                sheet = workbook.getSheetAt(0);
+            }
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null || isRowEmpty(row)) {
+                    continue;
+                }
+
+                try {
+                    String department = getCellValueAsString(row.getCell(0)).trim();
+                    String roomNo = getCellValueAsString(row.getCell(1)).trim();
+                    Integer noOfStudents = getCellValueAsInteger(row.getCell(2));
+                    String position = getCellValueAsString(row.getCell(3)).trim().toUpperCase();
+                    String subjectName = getCellValueAsString(row.getCell(4)).trim();
+
+                    if (department.isEmpty() || roomNo.isEmpty() || noOfStudents == null
+                            || position.isEmpty() || subjectName.isEmpty()) {
+                        log.warn("Skipping master row {} due to missing required fields", i + 1);
+                        continue;
+                    }
+
+                    if (!position.equals("L") && !position.equals("R")) {
+                        log.warn("Skipping master row {} - invalid position '{}', must be L or R", i + 1, position);
+                        continue;
+                    }
+
+                    rows.add(MasterSeatingRowDTO.builder()
+                            .department(department)
+                            .roomNo(roomNo)
+                            .noOfStudents(noOfStudents)
+                            .position(position)
+                            .subjectName(subjectName)
+                            .build());
+
+                } catch (Exception e) {
+                    log.error("Error parsing master row {}: {}", i + 1, e.getMessage());
+                }
+            }
+        }
+
+        log.info("Parsed {} master seating rows from Excel file", rows.size());
+        return rows;
     }
 
     private CellStyle createHeaderStyle(Workbook workbook) {

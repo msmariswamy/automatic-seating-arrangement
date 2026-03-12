@@ -26,6 +26,15 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
     @Query("SELECT s FROM Seat s WHERE s.isOccupied = false ORDER BY s.room.id, s.benchNo, s.position")
     List<Seat> findAllAvailableSeats();
 
+    @Query("SELECT s FROM Seat s WHERE s.room = :room AND s.position = :position " +
+           "AND s.isOccupied = false ORDER BY s.benchNo")
+    List<Seat> findAvailableSeatsByRoomAndPosition(@Param("room") Room room,
+                                                   @Param("position") String position);
+
+    @Query("SELECT s FROM Seat s WHERE s.position = 'M' AND s.isOccupied = false " +
+           "ORDER BY s.room.id, s.benchNo")
+    List<Seat> findAvailableMSeats();
+
     @Modifying
     @Query("UPDATE Seat s SET s.isOccupied = false")
     void resetAllOccupiedSeats();

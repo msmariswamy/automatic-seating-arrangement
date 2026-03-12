@@ -486,7 +486,7 @@ public class ReportExcelService {
         row8.setHeightInPoints(33.0f);
         createCell(row8, 0, "CLASS: " + report.getDepartment(), js.fieldLabel);
         sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 1));
-        createCell(row8, 2, "COURSE: ", js.fieldLabel);
+        createCell(row8, 2, "COURSE: " + report.getSubject(), js.fieldLabel);
         sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 2, 4));
         createCell(row8, 5, "SEM: " + sem, js.fieldLabel);
         createCell(row8, 6, "Exam: " + examType, js.fieldLabel);

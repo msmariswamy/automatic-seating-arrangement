@@ -87,6 +87,14 @@
             font-size: 0.95rem;
         }
 
+        #masterPreviewTable {
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        body.dark-mode #masterPreviewTable table {
+            color: #e0e0e0;
+        }
+
         /* Dark Mode */
         body.dark-mode {
             background-color: #1a1a2e;
@@ -286,6 +294,73 @@
             </div>
         </div>
 
+        <!-- Master Seating Section -->
+        <div class="card mb-4" id="masterSeatingCard">
+            <div class="card-header">
+                <i class="fas fa-table"></i> Generate Seating Based on Uploaded Master
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Left: Download & Upload -->
+                    <div class="col-md-6 mb-3">
+                        <h6 class="mb-3">Step 1: Download & Fill Master Template</h6>
+                        <div class="mb-3">
+                            <a href="/api/master/template" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="fas fa-download"></i> Download Master Template
+                            </a>
+                        </div>
+                        <h6 class="mb-2">Step 2: Upload Completed Master File</h6>
+                        <div class="mb-3">
+                            <input type="file" class="form-control" id="masterFile" accept=".xlsx,.xls">
+                        </div>
+                        <button onclick="uploadMasterSeating(this)" class="btn btn-primary w-100">
+                            <i class="fas fa-upload"></i> Upload Master Seating
+                        </button>
+                    </div>
+
+                    <!-- Right: Preview & Generate -->
+                    <div class="col-md-6 mb-3">
+                        <h6 class="mb-2">Master Data Preview</h6>
+                        <div id="masterStatusBadge" class="mb-2" style="display:none;">
+                            <span class="badge bg-success fs-6" id="masterRowCountBadge"></span>
+                        </div>
+                        <div id="masterPreviewTable" class="mb-3" style="max-height:200px;overflow-y:auto;display:none;">
+                            <table class="table table-sm table-bordered table-striped mb-0" style="font-size:0.82rem;">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Dept</th>
+                                        <th>Room</th>
+                                        <th>Count</th>
+                                        <th>Pos</th>
+                                        <th>Subject</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="masterPreviewBody"></tbody>
+                            </table>
+                        </div>
+                        <div id="masterNoDataMsg" class="text-muted small mb-3">
+                            No master file uploaded yet.
+                        </div>
+
+                        <label class="form-label">Arrangement Name (Optional)</label>
+                        <input type="text" class="form-control mb-3" id="masterArrangementName"
+                               placeholder="e.g., End-Term Exam March 2026">
+
+                        <button onclick="generateMasterSeating(this)" class="btn btn-primary w-100 mb-2">
+                            <i class="fas fa-magic"></i> Generate Seating
+                        </button>
+                    </div>
+                </div>
+
+                <hr>
+                <div class="text-center">
+                    <button onclick="clearMasterSeating(this)" class="btn btn-danger btn-sm">
+                        <i class="fas fa-trash"></i> Clear Master Seating
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Seating Arrangement Generation Section -->
         <div class="card mb-4">
             <div class="card-header">
@@ -377,6 +452,12 @@
         $(document).ready(function() {
             loadStatistics();
             loadFilters();
+            // Load master seating status
+            $.get('/api/master/status', function(data) {
+                if (data.hasData) {
+                    renderMasterPreview(data.rows);
+                }
+            });
         });
 
         // ===== Toast & Confirm Helpers =====
@@ -664,6 +745,100 @@
                     complete: function() {
                         setButtonLoading(btn, false);
                     }
+                });
+            });
+        }
+
+        // ===== Master Seating =====
+
+        function renderMasterPreview(rows) {
+            if (!rows || rows.length === 0) {
+                $('#masterPreviewTable').hide();
+                $('#masterStatusBadge').hide();
+                $('#masterNoDataMsg').show().text('No master data loaded.');
+                return;
+            }
+            let tbody = '';
+            rows.forEach(function(r) {
+                tbody += `<tr>
+                    <td>${r.department}</td>
+                    <td>${r.roomNo}</td>
+                    <td>${r.noOfStudents}</td>
+                    <td><span class="badge ${r.position === 'R' ? 'bg-primary' : 'bg-success'}">${r.position}</span></td>
+                    <td>${r.subjectName}</td>
+                </tr>`;
+            });
+            $('#masterPreviewBody').html(tbody);
+            $('#masterPreviewTable').show();
+            $('#masterRowCountBadge').text(rows.length + ' rows loaded');
+            $('#masterStatusBadge').show();
+            $('#masterNoDataMsg').hide();
+        }
+
+        function uploadMasterSeating(btn) {
+            let fileInput = document.getElementById('masterFile');
+            if (!fileInput.files.length) {
+                showToast('Please select a master Excel file', 'warning');
+                return;
+            }
+            setButtonLoading(btn, true);
+            let formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            $.ajax({
+                url: '/api/master/upload',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    showToast(response.message, 'success');
+                    renderMasterPreview(response.rows);
+                    fileInput.value = '';
+                },
+                error: function(xhr) {
+                    showToast('Error: ' + (xhr.responseJSON?.message || 'Upload failed'), 'error');
+                },
+                complete: function() { setButtonLoading(btn, false); }
+            });
+        }
+
+        function generateMasterSeating(btn) {
+            setButtonLoading(btn, true);
+            $.ajax({
+                url: '/api/master/generate',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ arrangementName: $('#masterArrangementName').val() }),
+                success: function(response) {
+                    if (response.success) {
+                        showToast('Success! ' + response.totalStudents + ' students seated across '
+                            + response.roomsUsed + ' rooms', 'success');
+                        setTimeout(function() {
+                            window.location.href = '/api/seating/reports';
+                        }, 1500);
+                    }
+                },
+                error: function(xhr) {
+                    showToast('Error: ' + (xhr.responseJSON?.message || 'Generation failed'), 'error');
+                },
+                complete: function() { setButtonLoading(btn, false); }
+            });
+        }
+
+        function clearMasterSeating(btn) {
+            showConfirm('Are you sure you want to clear the master seating data?', function() {
+                setButtonLoading(btn, true);
+                $.ajax({
+                    url: '/api/master',
+                    type: 'DELETE',
+                    success: function(response) {
+                        showToast(response.message, 'success');
+                        renderMasterPreview([]);
+                    },
+                    error: function(xhr) {
+                        showToast('Error: ' + (xhr.responseJSON?.message || 'Clear failed'), 'error');
+                    },
+                    complete: function() { setButtonLoading(btn, false); }
                 });
             });
         }
