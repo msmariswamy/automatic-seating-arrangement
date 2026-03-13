@@ -720,21 +720,26 @@ public class SeatingArrangementService {
         LocalDate today = LocalDate.now();
         List<SeatingArrangement> arrangements = new ArrayList<>();
 
-        // Pre-load student queues for every subject mentioned in the master file
-        Set<String> allSubjects = masterRows.stream()
-                .map(MasterSeatingRowDTO::getSubjectName)
-                .collect(Collectors.toSet());
-
-        Map<String, Deque<Student>> subjectQueues = new HashMap<>();
-        for (String subject : allSubjects) {
-            List<Student> students = studentRepository.findUnallocatedBySubject(subject);
-            subjectQueues.put(subject, new ArrayDeque<>(students));
-            log.info("Master seating: subject '{}' → {} students available", subject, students.size());
+        // Pre-load student queues keyed by "department|||subject" so that
+        // multiple departments sharing the same subject each get their own pool.
+        String QUEUE_KEY_SEP = "|||";
+        Map<String, Deque<Student>> deptSubjectQueues = new HashMap<>();
+        for (MasterSeatingRowDTO row : masterRows) {
+            String key = row.getDepartment() + QUEUE_KEY_SEP + row.getSubjectName();
+            if (!deptSubjectQueues.containsKey(key)) {
+                List<Student> students = studentRepository
+                        .findUnallocatedBySubjectAndDepartment(row.getSubjectName(), row.getDepartment());
+                deptSubjectQueues.put(key, new ArrayDeque<>(students));
+                log.info("Master seating: dept='{}' subject='{}' → {} students available",
+                        row.getDepartment(), row.getSubjectName(), students.size());
+            }
         }
 
         // benchSubjectMap: roomId → benchNo → [rSubject, lSubject]
         // Used in Phase 2 to decide which subject fills each M seat.
+        // benchDeptMap:    roomId → benchNo → [rDept,    lDept]
         Map<Long, Map<Integer, String[]>> benchSubjectMap = new HashMap<>();
+        Map<Long, Map<Integer, String[]>> benchDeptMap    = new HashMap<>();
 
         // Phase 1: allocate R and L seats from master rows
         for (MasterSeatingRowDTO row : masterRows) {
@@ -749,10 +754,11 @@ public class SeatingArrangementService {
                 continue;
             }
 
-            Deque<Student> queue = subjectQueues.get(row.getSubjectName());
+            String key = row.getDepartment() + QUEUE_KEY_SEP + row.getSubjectName();
+            Deque<Student> queue = deptSubjectQueues.get(key);
             if (queue == null || queue.isEmpty()) {
-                log.warn("No students available for subject '{}' in room {} — skipping row",
-                        row.getSubjectName(), row.getRoomNo());
+                log.warn("No students available for dept='{}' subject='{}' in room {} — skipping row",
+                        row.getDepartment(), row.getSubjectName(), row.getRoomNo());
                 continue;
             }
 
@@ -776,22 +782,31 @@ public class SeatingArrangementService {
                 student.setIsAllocated(true);
                 seat.setIsOccupied(true);
 
-                // Track which subject is on R/L of this bench for Phase 2
+                // Track which subject/dept is on R/L of this bench for Phase 2
                 benchSubjectMap
                         .computeIfAbsent(room.getId(), k -> new HashMap<>())
                         .computeIfAbsent(seat.getBenchNo(), k -> new String[2]);
-                String[] pair = benchSubjectMap.get(room.getId()).get(seat.getBenchNo());
-                if ("R".equals(row.getPosition())) pair[0] = row.getSubjectName();
-                else pair[1] = row.getSubjectName();
+                benchDeptMap
+                        .computeIfAbsent(room.getId(), k -> new HashMap<>())
+                        .computeIfAbsent(seat.getBenchNo(), k -> new String[2]);
+                String[] subjectPair = benchSubjectMap.get(room.getId()).get(seat.getBenchNo());
+                String[] deptPair    = benchDeptMap.get(room.getId()).get(seat.getBenchNo());
+                if ("R".equals(row.getPosition())) {
+                    subjectPair[0] = row.getSubjectName();
+                    deptPair[0]    = row.getDepartment();
+                } else {
+                    subjectPair[1] = row.getSubjectName();
+                    deptPair[1]    = row.getDepartment();
+                }
 
                 allocated++;
             }
 
-            log.info("Master Phase 1: allocated {} students of '{}' to room {} ({})",
-                    allocated, row.getSubjectName(), row.getRoomNo(), row.getPosition());
+            log.info("Master Phase 1: allocated {} students of dept='{}' subject='{}' to room {} ({})",
+                    allocated, row.getDepartment(), row.getSubjectName(), row.getRoomNo(), row.getPosition());
         }
 
-        // Phase 2: fill M seats
+        // Phase 2: fill M seats — match whichever R/L side has more students remaining
         List<Seat> mSeats = seatRepository.findAvailableMSeats();
         log.info("Master Phase 2: {} M seats to fill", mSeats.size());
 
@@ -799,33 +814,43 @@ public class SeatingArrangementService {
             Long roomId = mSeat.getRoom().getId();
             int benchNo = mSeat.getBenchNo();
 
-            String[] pair = benchSubjectMap
+            String[] subjectPair = benchSubjectMap
+                    .getOrDefault(roomId, Collections.emptyMap())
+                    .getOrDefault(benchNo, new String[2]);
+            String[] deptPair = benchDeptMap
                     .getOrDefault(roomId, Collections.emptyMap())
                     .getOrDefault(benchNo, new String[2]);
 
-            String rSubject = pair[0];
-            String lSubject = pair[1];
+            String rSubject = subjectPair[0];
+            String lSubject = subjectPair[1];
+            String rDept    = deptPair[0];
+            String lDept    = deptPair[1];
 
-            String chosen = null;
+            String chosenSubject = null;
+            String chosenDept    = null;
             if (rSubject != null && lSubject != null) {
-                int rCount = subjectQueues.getOrDefault(rSubject, new ArrayDeque<>()).size();
-                int lCount = subjectQueues.getOrDefault(lSubject, new ArrayDeque<>()).size();
-                chosen = (rCount >= lCount) ? rSubject : lSubject;
+                String rKey = rDept + QUEUE_KEY_SEP + rSubject;
+                String lKey = lDept + QUEUE_KEY_SEP + lSubject;
+                int rCount = deptSubjectQueues.getOrDefault(rKey, new ArrayDeque<>()).size();
+                int lCount = deptSubjectQueues.getOrDefault(lKey, new ArrayDeque<>()).size();
+                if (rCount >= lCount) { chosenSubject = rSubject; chosenDept = rDept; }
+                else                  { chosenSubject = lSubject; chosenDept = lDept; }
             } else if (rSubject != null) {
-                chosen = rSubject;
+                chosenSubject = rSubject; chosenDept = rDept;
             } else if (lSubject != null) {
-                chosen = lSubject;
+                chosenSubject = lSubject; chosenDept = lDept;
             }
 
-            if (chosen != null) {
-                Deque<Student> queue = subjectQueues.get(chosen);
+            if (chosenSubject != null) {
+                String chosenKey = chosenDept + QUEUE_KEY_SEP + chosenSubject;
+                Deque<Student> queue = deptSubjectQueues.get(chosenKey);
                 if (queue != null && !queue.isEmpty()) {
                     Student student = queue.poll();
                     arrangements.add(SeatingArrangement.builder()
                             .student(student)
                             .room(mSeat.getRoom())
                             .seat(mSeat)
-                            .subject(chosen)
+                            .subject(chosenSubject)
                             .arrangementDate(today)
                             .arrangementName(arrangementName)
                             .build());
@@ -875,8 +900,8 @@ public class SeatingArrangementService {
                 String department = deptEntry.getKey();
                 List<SeatingArrangement> deptArrangements = deptEntry.getValue();
 
-                // Sort by roll number to get first and last roll numbers
-                deptArrangements.sort(Comparator.comparing(a -> a.getStudent().getRollNo()));
+                // Sort by student ID (upload/insertion order) to preserve the original upload sequence
+                deptArrangements.sort(Comparator.comparing(a -> a.getStudent().getId()));
 
                 List<String> allRollNumbers = deptArrangements.stream()
                         .map(a -> a.getStudent().getRollNo())
@@ -942,13 +967,13 @@ public class SeatingArrangementService {
                     // Get room ID from first arrangement
                     Long roomId = roomArrangements.get(0).getRoom().getId();
 
-                    // Collect and sort all roll numbers
+                    // Collect roll numbers sorted by student ID (upload/insertion order)
                     List<String> seatNumbers = roomArrangements.stream()
+                            .sorted(Comparator.comparing(a -> a.getStudent().getId()))
                             .map(a -> a.getStudent().getRollNo())
-                            .sorted()
                             .collect(Collectors.toList());
 
-                    // First seat is the first in sorted order
+                    // First seat is the first in upload order
                     String fromSeat = seatNumbers.isEmpty() ? "" : seatNumbers.get(0);
                     // Last seat is the last in sorted order
                     String toSeat = seatNumbers.isEmpty() ? "" : seatNumbers.get(seatNumbers.size() - 1);

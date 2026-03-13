@@ -53,6 +53,12 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "AND EXISTS (SELECT 1 FROM s.subjects sub WHERE sub = :subject) ORDER BY s.rollNo")
     List<Student> findUnallocatedBySubject(@Param("subject") String subject);
 
+    @Query("SELECT s FROM Student s WHERE s.isAllocated = false " +
+           "AND s.department = :department " +
+           "AND EXISTS (SELECT 1 FROM s.subjects sub WHERE sub = :subject) ORDER BY s.id")
+    List<Student> findUnallocatedBySubjectAndDepartment(
+            @Param("subject") String subject, @Param("department") String department);
+
     @Modifying
     @Query("UPDATE Student s SET s.isAllocated = false")
     void resetAllAllocations();
